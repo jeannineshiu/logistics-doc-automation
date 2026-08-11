@@ -210,7 +210,7 @@ Below the fold, a searchable document table and latency percentiles for debuggin
 
 ## Tests
 
-90 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
+102 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
 pinned so a rebuild reproduces the versions these numbers were measured on:
 
 ```bash
@@ -223,6 +223,13 @@ The workflow JSON is treated as source: `validate_workflows.py` catches dangling
 connections from a renamed node, unreachable nodes, and an `errorWorkflow` id
 that no longer resolves — the last one is silent in n8n, which merely logs
 *"is not active and cannot be executed"* and keeps going.
+
+So is this README. `test_readme.py` pins the claims that can be checked without
+judgement — that every endpoint, node name, setting and path it mentions still
+exists, that the HTTP-node count and test count still match, and that no table
+has been split by an inserted paragraph. It cannot tell whether the prose is
+*true*; it exists because renaming a node or adding an endpoint used to leave
+documentation quietly wrong, with nothing to catch it.
 
 CI runs that suite and separately builds the images, starts the whole stack with
 `--wait`, and asserts that `/health` turns 503 when postgres is stopped. Lint and
