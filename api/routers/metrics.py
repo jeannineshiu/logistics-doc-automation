@@ -4,6 +4,8 @@ from models.db import Document, get_session
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from routers.dead_letter import open_count
+
 router = APIRouter(tags=["metrics"])
 
 
@@ -43,5 +45,10 @@ def metrics(db: Session = Depends(get_session)):
         "# HELP llm_cost_usd_total Total estimated LLM cost in USD.",
         "# TYPE llm_cost_usd_total counter",
         f"llm_cost_usd_total {cost:.6f}",
+        # The alertable one: documents that exhausted every retry and are
+        # waiting for a human to requeue them. Anything above 0 is a backlog.
+        "# HELP dead_letter_open Documents that failed processing and need requeueing.",
+        "# TYPE dead_letter_open gauge",
+        f"dead_letter_open {open_count(db)}",
     ]
     return "\n".join(lines) + "\n"

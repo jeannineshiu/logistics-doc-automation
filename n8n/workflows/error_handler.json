@@ -12,15 +12,34 @@
     },
     {
       "parameters": {
-        "content": "## Self-healing / exception handling\nSet this workflow as the *Error Workflow* of the main pipeline\n(Settings → Error Workflow). Any failed node routes here.\nReplace the NoOp with Slack/Email to alert with:\nworkflow {{ $json.workflow.name }}, node {{ $json.execution.lastNodeExecuted }}, error {{ $json.execution.error.message }}",
-        "height": 140,
-        "width": 380
+        "content": "## Exception handling\nSet as the *Error Workflow* of the main pipeline (already wired via\n`settings.errorWorkflow`). Any failed node routes here.\n\n**Record to dead letter** persists the failure so the document is not\nsilently lost — `/metrics` exposes `dead_letter_open` for alerting and\n`GET /dead-letter` is the requeue backlog.\n\nReplace the NoOp with Slack/Email to also page a human.",
+        "height": 220,
+        "width": 420
       },
       "id": "note-error",
       "name": "Note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [180, -200]
+      "position": [180, -280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/dead-letter",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workflow_name: $json.workflow?.name || '', execution_id: String($json.execution?.id || ''), node_name: $json.execution?.lastNodeExecuted || '', error_message: $json.execution?.error?.message || 'unknown error', payload: { mode: $json.execution?.mode || '', url: $json.execution?.url || '', retry_of: $json.execution?.retryOf || null } }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "dead-letter",
+      "name": "Record to Dead Letter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {},
@@ -28,11 +47,14 @@
       "name": "Alert Ops (replace with Slack/Email)",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [220, 0]
+      "position": [440, 0]
     }
   ],
   "connections": {
     "Error Trigger": {
+      "main": [[{ "node": "Record to Dead Letter", "type": "main", "index": 0 }]]
+    },
+    "Record to Dead Letter": {
       "main": [[{ "node": "Alert Ops (replace with Slack/Email)", "type": "main", "index": 0 }]]
     }
   },

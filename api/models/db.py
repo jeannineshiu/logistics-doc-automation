@@ -52,6 +52,29 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class DeadLetter(Base):
+    """A document that failed processing and would otherwise be lost.
+
+    n8n retries the extract call 3x and then fails the execution. Without a
+    record on this side, the document is simply gone: the error workflow only
+    notifies. Rows here are the queue of work that needs a human to requeue.
+    """
+
+    __tablename__ = "dead_letter"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workflow_name: Mapped[str] = mapped_column(String(128), default="")
+    execution_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    node_name: Mapped[str] = mapped_column(String(128), default="")
+    error_message: Mapped[str] = mapped_column(Text, default="")
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    status: Mapped[str] = mapped_column(String(16), default="open", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
 

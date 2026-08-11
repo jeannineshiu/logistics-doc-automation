@@ -86,6 +86,16 @@ class ReviewRequest(BaseModel):
     reviewer: str
 
 
+class DeadLetterRequest(BaseModel):
+    """Posted by the n8n error workflow when an execution fails for good."""
+
+    workflow_name: str = ""
+    execution_id: str = ""
+    node_name: str = ""
+    error_message: str = ""
+    payload: dict = Field(default_factory=dict)
+
+
 FIELD_NAMES: dict[DocType, list[str]] = {
     DocType.INVOICE: INVOICE_FIELDS,
     DocType.CUSTOMS_FORM: CUSTOMS_FIELDS,

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 from models.db import get_session, init_db
-from routers import documents, extract, metrics, review
+from routers import dead_letter, documents, extract, metrics, review
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -27,6 +27,7 @@ app.include_router(extract.router)
 app.include_router(documents.router)
 app.include_router(review.router)
 app.include_router(metrics.router)
+app.include_router(dead_letter.router)
 
 
 @app.get("/live")
