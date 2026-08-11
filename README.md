@@ -124,22 +124,17 @@ The corrections box takes free-text JSON, so sooner or later someone submits a t
 
 ![The same review form with a malformed value typed into corrections_json — {"gross_weight_kg": "1240.5",} with a trailing comma before the closing brace — and jeannine entered as the reviewer, about to be submitted](docs/HITL_invalid_correction.png)
 
-Parsing this inline in the HTTP node threw a raw `SyntaxError` *after* the Wait node had been consumed: the execution failed, the typed correction was gone, and the document was stranded in `pending_review` with no way to resume it. It now takes the validation node's false branch into the dead-letter queue, carrying the exact submitted text:
+Parsing this inline in the HTTP node threw a raw `SyntaxError` *after* the Wait node had been consumed: the execution failed, the typed correction was gone, and the document was stranded in `pending_review` with no way to resume it.
 
-```json
-{
-  "execution_id": "2-review",
-  "node_name": "Review: Validate Corrections",
-  "error_message": "invalid JSON: Expected double-quoted property name in JSON at position 29 (line 1 column 30)",
-  "payload": {
-    "reviewer": "jeannine",
-    "submitted": "{\"gross_weight_kg\": \"1240.5\",}",
-    "document_id": "07b3187e-572c-411c-af4c-8fe47c295969"
-  }
-}
-```
+It now takes the validation node's **false** branch instead. The execution succeeds, and the branch that would have written to the database never runs:
 
-The document stays `pending_review`, so the review can be redone from what the reviewer actually typed rather than from memory.
+![n8n execution trace of the same run: Webhook, Call Extract API and Switch on Status all succeeded, the review branch ran through Wait for Human, Validate Corrections and Corrections Valid?, and the false output carries 1 item into Review: Record Invalid Correction — while Review: Submit Corrections stays grey and unexecuted](docs/n8n_invalid_branch.png)
+
+`Review: Submit Corrections` is grey: nothing was written for a submission that could not be parsed. Opening the node that did run shows why this beats failing the execution — the reviewer's exact text survives:
+
+![The Review: Record Invalid Correction node opened in n8n. Its input from Corrections Valid? is one item with valid=false, reviewer=jeannine, raw={"gross_weight_kg": "1240.5",} and error "invalid JSON: Expected double-quoted property name in JSON at position 29 (line 1 column 30)". Its parameters POST to http://api:8000/dead-letter, and its output is the created row: id 2, status open, deduplicated false](docs/dead_letter_payload.png)
+
+`raw` still holds `{"gross_weight_kg": "1240.5",}` — the trailing comma and all — and the API returns the row it created (`id 2`, `status open`). `GET /dead-letter` returns the same record with the `document_id` attached. The document stays `pending_review`, so the review can be redone from what the reviewer actually typed rather than from memory.
 
 > **n8n Cloud:** import the same JSON, then change the two HTTP nodes' base URL from `http://api:8000` to a publicly reachable URL for the API (e.g. a `cloudflared`/`ngrok` tunnel to `localhost:8000`).
 
