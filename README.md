@@ -42,6 +42,21 @@ docker compose up --build
 | n8n | http://localhost:5678 |
 | Streamlit dashboard | http://localhost:8501 |
 | Metrics | http://localhost:8000/metrics |
+| Health (readiness) | http://localhost:8000/health |
+
+### Operational behaviour
+
+Failure handling is a design decision here, not an afterthought — each of these is verified by stopping the dependency and watching what happens:
+
+| Concern | Behaviour |
+|---|---|
+| **Readiness vs. liveness** | `/health` executes `SELECT 1`, so it returns **503** when the database is unreachable; `/live` never touches a dependency. A health check that cannot reach the database reports `ok` while every real endpoint 500s — and a load balancer keeps sending traffic to an API that cannot answer. |
+| **Startup ordering** | `api` waits for `postgres: service_healthy`; `n8n` and `dashboard` wait for `api: service_healthy`. Nothing starts against a dependency that is not ready. |
+| **Container health** | Every service has a healthcheck and `restart: unless-stopped`. With the database stopped, `api` flips to `unhealthy` after 5 failed probes (~50 s) and returns to `healthy` on its own once the database is back — no manual restart. |
+| **Transient database loss** | SQLAlchemy discards the dead connections and reconnects; requests succeed again without restarting the API. |
+| **Upstream API failure** | The n8n `Call Extract API` node retries 3× with a 3 s backoff, then fails the execution, which triggers the **Error Handler** workflow via `errorWorkflow: LogisticsErrorWf`. |
+| **Execution history** | `EXECUTIONS_DATA_PRUNE` with a 14-day window keeps the n8n database from growing without bound. |
+| **Credential encryption** | `N8N_ENCRYPTION_KEY` is passed through only when set, so it can be pinned on a fresh volume without invalidating an existing one. |
 
 Generate the synthetic test corpus (50 docs: EN/DE invoices, CN22/23-style customs forms, noisy scans, missing-field variants) and try one:
 
@@ -64,6 +79,8 @@ docker compose restart n8n            # publishing via CLI needs a restart to ta
 
 Both workflows carry fixed IDs, so the import is idempotent (re-running updates in place) and `doc_processing` already points its **Error Workflow** at `Error Handler` — no manual wiring. The error handler has to be published too: n8n skips an unpublished error workflow and only logs *"is not active and cannot be executed"*.
 
+![n8n canvas: Webhook receives the document, Call Extract API runs the three-layer engine, Switch on Decision branches into auto-approve notify, human-review wait-for-form, or reject alert](docs/n8n_workflow_canvas.png)
+
 > **n8n 2.x UI notes.** Activation was renamed — the top-right toggle is **Publish**, not *Active*. The GUI importer moved inside the editor: open a workflow, then **⋯ (top right) → Import from File**; pasting the JSON onto the canvas with `Cmd+V` also works.
 
 Send a document to the webhook:
@@ -78,7 +95,13 @@ curl -F "file=@data/samples/invoice_004_scan.pdf" http://localhost:5678/webhook/
 
 The `human_review` branch pauses on an **n8n Form** — the reviewer corrects the flagged fields and the workflow resumes by writing back through `POST /review/{id}`.
 
+![n8n Form node paused mid-execution, showing the flagged fields (declaration_number, hs_code, country_of_origin, …) with their rule-derived values and confidence scores, waiting for a reviewer to submit corrections](docs/HITL.png)
+
 > **n8n Cloud:** import the same JSON, then change the two HTTP nodes' base URL from `http://api:8000` to a publicly reachable URL for the API (e.g. a `cloudflared`/`ngrok` tunnel to `localhost:8000`).
+
+An end-to-end run in the **Executions** tab — webhook in, rule/LLM extraction, decision switch, all green:
+
+![n8n execution trace: a document flowing through Webhook → Call Extract API → Switch on Decision → Review branch, each node marked succeeded, total runtime 17.668s](docs/success_run.png)
 
 ## Evaluation
 
@@ -124,6 +147,16 @@ docker rm -f baseline
 ### Deterministic-only mode
 
 With `LLM_ENABLED=0` (no API key, no spend) the rule layer alone reaches 100% auto-approve precision on 34 documents at 30 ms p50, correctly routing all 10 scans and every missing-field document to human review — a usable extractor with zero LLM dependency, and the baseline the LLM layer is measured against.
+
+## Dashboard
+
+The Streamlit ops view at `http://localhost:8501` gives volume, decision mix, and cost at a glance:
+
+![Streamlit dashboard header: 50 documents processed, 43 (86%) auto-approved, 14% human-intervention rate, $0.0981 total LLM cost — with bar charts for decisions and per-document cost](docs/Dashboard01.png)
+
+Below the fold, a searchable document table and latency percentiles for debugging individual runs:
+
+![Streamlit document table filtered to approved/pending_review, with per-document doc_type, decision, confidence, tokens_used, cost_usd, and latency_ms; latency summary shows p50 64ms, p95 6907ms](docs/Dashboard02.png)
 
 ## Idempotency & audit
 
