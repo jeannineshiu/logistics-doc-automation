@@ -116,7 +116,30 @@ curl -F "file=@data/samples/invoice_004_scan.pdf" http://localhost:5678/webhook/
 
 The `human_review` branch pauses on an **n8n Form** — the reviewer corrects the flagged fields and the workflow resumes by writing back through `POST /review/{id}`.
 
-![n8n Form node paused mid-execution, showing the flagged fields (declaration_number, hs_code, country_of_origin, …) with their rule-derived values and confidence scores, waiting for a reviewer to submit corrections](docs/HITL.png)
+![n8n Form node paused mid-execution for a customs form, headed "Document Review" with the document id, naming gross_weight_kg as the low-confidence or missing field, and offering a corrections_json textarea and a reviewer field above a Submit button](docs/HITL.png)
+
+### A reviewer's typo does not cost their work
+
+The corrections box takes free-text JSON, so sooner or later someone submits a trailing comma:
+
+![The same review form with a malformed value typed into corrections_json — {"gross_weight_kg": "1240.5",} with a trailing comma before the closing brace — and jeannine entered as the reviewer, about to be submitted](docs/HITL_invalid_correction.png)
+
+Parsing this inline in the HTTP node threw a raw `SyntaxError` *after* the Wait node had been consumed: the execution failed, the typed correction was gone, and the document was stranded in `pending_review` with no way to resume it. It now takes the validation node's false branch into the dead-letter queue, carrying the exact submitted text:
+
+```json
+{
+  "execution_id": "2-review",
+  "node_name": "Review: Validate Corrections",
+  "error_message": "invalid JSON: Expected double-quoted property name in JSON at position 29 (line 1 column 30)",
+  "payload": {
+    "reviewer": "jeannine",
+    "submitted": "{\"gross_weight_kg\": \"1240.5\",}",
+    "document_id": "07b3187e-572c-411c-af4c-8fe47c295969"
+  }
+}
+```
+
+The document stays `pending_review`, so the review can be redone from what the reviewer actually typed rather than from memory.
 
 > **n8n Cloud:** import the same JSON, then change the two HTTP nodes' base URL from `http://api:8000` to a publicly reachable URL for the API (e.g. a `cloudflared`/`ngrok` tunnel to `localhost:8000`).
 
