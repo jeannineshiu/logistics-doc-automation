@@ -1,0 +1,40 @@
+{
+  "name": "Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "content": "## Self-healing / exception handling\nSet this workflow as the *Error Workflow* of the main pipeline\n(Settings → Error Workflow). Any failed node routes here.\nReplace the NoOp with Slack/Email to alert with:\nworkflow {{ $json.workflow.name }}, node {{ $json.execution.lastNodeExecuted }}, error {{ $json.execution.error.message }}",
+        "height": 140,
+        "width": 380
+      },
+      "id": "note-error",
+      "name": "Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [180, -200]
+    },
+    {
+      "parameters": {},
+      "id": "alert",
+      "name": "Alert Ops (replace with Slack/Email)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [220, 0]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [[{ "node": "Alert Ops (replace with Slack/Email)", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

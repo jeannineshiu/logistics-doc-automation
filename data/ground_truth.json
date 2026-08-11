@@ -1,0 +1,486 @@
+{
+  "invoice_000.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00000",
+    "invoice_date": "2025-02-01",
+    "supplier_name": "Riviera Shipping S.r.l.",
+    "supplier_vat_id": "IT27680402501",
+    "currency": "EUR",
+    "total_amount": "7065.41",
+    "iban": "DE75512108001245126199"
+  },
+  "invoice_001.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00001",
+    "invoice_date": "2025-12-18",
+    "supplier_name": "Riviera Shipping S.r.l.",
+    "supplier_vat_id": "IT58086319300",
+    "currency": "EUR",
+    "total_amount": "4031.88",
+    "iban": "AT611904300234573201"
+  },
+  "customs_002.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE8687593586",
+    "hs_code": "940360",
+    "country_of_origin": "US",
+    "gross_weight_kg": "23.50",
+    "declared_value": "296.83",
+    "currency": "EUR"
+  },
+  "invoice_003.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00003",
+    "invoice_date": "2025-04-25",
+    "supplier_name": "Riviera Shipping S.r.l.",
+    "supplier_vat_id": "IT88348136760",
+    "currency": "EUR",
+    "total_amount": "2806.03",
+    "iban": "DE89370400440532013000"
+  },
+  "invoice_004_scan.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00004",
+    "invoice_date": "2025-03-18",
+    "supplier_name": "Riviera Shipping S.r.l.",
+    "supplier_vat_id": "IT42962370884",
+    "currency": "EUR",
+    "total_amount": "6948.37",
+    "iban": "DE75512108001245126199"
+  },
+  "customs_005.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE5361058427",
+    "hs_code": "870899",
+    "country_of_origin": "PL",
+    "gross_weight_kg": "47.90",
+    "declared_value": "3686.61",
+    "currency": "EUR"
+  },
+  "invoice_006.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": null,
+    "invoice_date": "2025-12-27",
+    "supplier_name": "Muster Logistik GmbH",
+    "supplier_vat_id": "DE693282190",
+    "currency": "EUR",
+    "total_amount": "8336.30",
+    "iban": "NL91ABNA0417164300"
+  },
+  "invoice_007.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00007",
+    "invoice_date": "2025-04-08",
+    "supplier_name": "Riviera Shipping S.r.l.",
+    "supplier_vat_id": "IT62020684554",
+    "currency": "EUR",
+    "total_amount": "8323.78",
+    "iban": "AT611904300234573201"
+  },
+  "customs_008.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE8568977982",
+    "hs_code": "940360",
+    "country_of_origin": "PL",
+    "gross_weight_kg": "108.10",
+    "declared_value": "3748.95",
+    "currency": "EUR"
+  },
+  "invoice_009_scan.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00009",
+    "invoice_date": "2025-09-12",
+    "supplier_name": "Van Dijk Freight B.V.",
+    "supplier_vat_id": "NL189251975B01",
+    "currency": "EUR",
+    "total_amount": "805.72",
+    "iban": "IT60X0542811101000000123456"
+  },
+  "invoice_010.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00010",
+    "invoice_date": "2025-08-27",
+    "supplier_name": "Nordwind Spedition AG",
+    "supplier_vat_id": "DE469836545",
+    "currency": "EUR",
+    "total_amount": "2568.69",
+    "iban": "PL61109010140000071219812874"
+  },
+  "customs_011.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE5633064069",
+    "hs_code": "640411",
+    "country_of_origin": "US",
+    "gross_weight_kg": "28.20",
+    "declared_value": "393.19",
+    "currency": "EUR"
+  },
+  "invoice_012.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00012",
+    "invoice_date": "2025-11-10",
+    "supplier_name": "Alpine Cargo GmbH",
+    "supplier_vat_id": "ATU36669445",
+    "currency": "EUR",
+    "total_amount": "3320.67",
+    "iban": "NL91ABNA0417164300"
+  },
+  "invoice_013.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00013",
+    "invoice_date": "2025-07-15",
+    "supplier_name": "Muster Logistik GmbH",
+    "supplier_vat_id": "DE208868347",
+    "currency": "EUR",
+    "total_amount": "1962.08",
+    "iban": null
+  },
+  "customs_014_scan.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE1481455574",
+    "hs_code": "851713",
+    "country_of_origin": "CN",
+    "gross_weight_kg": "70.90",
+    "declared_value": "3732.98",
+    "currency": "EUR"
+  },
+  "invoice_015.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00015",
+    "invoice_date": "2025-05-23",
+    "supplier_name": "Nordwind Spedition AG",
+    "supplier_vat_id": "DE957683973",
+    "currency": "EUR",
+    "total_amount": "7986.71",
+    "iban": "NL91ABNA0417164300"
+  },
+  "invoice_016.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00016",
+    "invoice_date": "2025-09-24",
+    "supplier_name": "Riviera Shipping S.r.l.",
+    "supplier_vat_id": "IT85011204430",
+    "currency": "EUR",
+    "total_amount": "7838.33",
+    "iban": "AT611904300234573201"
+  },
+  "customs_017.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE1619244425",
+    "hs_code": "851713",
+    "country_of_origin": "IT",
+    "gross_weight_kg": "82.40",
+    "declared_value": "2914.38",
+    "currency": "EUR"
+  },
+  "invoice_018.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00018",
+    "invoice_date": "2025-09-28",
+    "supplier_name": "Baltic Forwarding Sp. z o.o.",
+    "supplier_vat_id": "PL0825585630",
+    "currency": "EUR",
+    "total_amount": "1871.17",
+    "iban": "DE75512108001245126199"
+  },
+  "invoice_019_scan.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00019",
+    "invoice_date": "2025-07-01",
+    "supplier_name": "Nordwind Spedition AG",
+    "supplier_vat_id": "DE027244649",
+    "currency": "EUR",
+    "total_amount": "8199.85",
+    "iban": "DE75512108001245126199"
+  },
+  "customs_020.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE4845868138",
+    "hs_code": "620342",
+    "country_of_origin": "IT",
+    "gross_weight_kg": null,
+    "declared_value": "58.88",
+    "currency": "EUR"
+  },
+  "invoice_021.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00021",
+    "invoice_date": "2025-02-05",
+    "supplier_name": "Baltic Forwarding Sp. z o.o.",
+    "supplier_vat_id": "PL4804896938",
+    "currency": "EUR",
+    "total_amount": "7254.96",
+    "iban": "DE89370400440532013000"
+  },
+  "invoice_022.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00022",
+    "invoice_date": "2025-10-08",
+    "supplier_name": "Van Dijk Freight B.V.",
+    "supplier_vat_id": "NL112393213B01",
+    "currency": "EUR",
+    "total_amount": "8243.61",
+    "iban": "IT60X0542811101000000123456"
+  },
+  "customs_023.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE9937185304",
+    "hs_code": "870899",
+    "country_of_origin": "US",
+    "gross_weight_kg": "24.30",
+    "declared_value": "3752.30",
+    "currency": "EUR"
+  },
+  "invoice_024_scan.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00024",
+    "invoice_date": "2025-09-03",
+    "supplier_name": "Nordwind Spedition AG",
+    "supplier_vat_id": "DE394367570",
+    "currency": "EUR",
+    "total_amount": "3064.55",
+    "iban": "PL61109010140000071219812874"
+  },
+  "invoice_025.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00025",
+    "invoice_date": "2025-10-20",
+    "supplier_name": "Baltic Forwarding Sp. z o.o.",
+    "supplier_vat_id": "PL5267863998",
+    "currency": "EUR",
+    "total_amount": "7222.90",
+    "iban": "AT611904300234573201"
+  },
+  "customs_026.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE6379201733",
+    "hs_code": "940360",
+    "country_of_origin": "IT",
+    "gross_weight_kg": "42.60",
+    "declared_value": "2724.67",
+    "currency": "EUR"
+  },
+  "invoice_027.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00027",
+    "invoice_date": "2025-09-06",
+    "supplier_name": null,
+    "supplier_vat_id": "IT74223194864",
+    "currency": "EUR",
+    "total_amount": "7898.57",
+    "iban": "NL91ABNA0417164300"
+  },
+  "invoice_028.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00028",
+    "invoice_date": "2025-04-07",
+    "supplier_name": "Alpine Cargo GmbH",
+    "supplier_vat_id": "ATU95352564",
+    "currency": "EUR",
+    "total_amount": "7184.44",
+    "iban": "DE75512108001245126199"
+  },
+  "customs_029_scan.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE7601682294",
+    "hs_code": "870899",
+    "country_of_origin": "DE",
+    "gross_weight_kg": "24.50",
+    "declared_value": "1300.49",
+    "currency": "EUR"
+  },
+  "invoice_030.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00030",
+    "invoice_date": "2025-03-06",
+    "supplier_name": "Muster Logistik GmbH",
+    "supplier_vat_id": "DE500891599",
+    "currency": "EUR",
+    "total_amount": "394.13",
+    "iban": "DE75512108001245126199"
+  },
+  "invoice_031.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00031",
+    "invoice_date": "2025-01-24",
+    "supplier_name": "Alpine Cargo GmbH",
+    "supplier_vat_id": "ATU64142592",
+    "currency": "EUR",
+    "total_amount": "8864.78",
+    "iban": "IT60X0542811101000000123456"
+  },
+  "customs_032.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE9908161103",
+    "hs_code": "851713",
+    "country_of_origin": "DE",
+    "gross_weight_kg": "32.80",
+    "declared_value": "1943.21",
+    "currency": "EUR"
+  },
+  "invoice_033.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00033",
+    "invoice_date": "2025-12-17",
+    "supplier_name": "Van Dijk Freight B.V.",
+    "supplier_vat_id": "NL485572666B01",
+    "currency": "EUR",
+    "total_amount": "3896.18",
+    "iban": "DE89370400440532013000"
+  },
+  "invoice_034_scan.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00034",
+    "invoice_date": "2025-10-01",
+    "supplier_name": null,
+    "supplier_vat_id": "DE456072365",
+    "currency": "EUR",
+    "total_amount": "8222.94",
+    "iban": "DE75512108001245126199"
+  },
+  "customs_035.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE5339650085",
+    "hs_code": "640411",
+    "country_of_origin": "US",
+    "gross_weight_kg": "72.60",
+    "declared_value": "917.95",
+    "currency": "EUR"
+  },
+  "invoice_036.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00036",
+    "invoice_date": "2025-07-08",
+    "supplier_name": "Baltic Forwarding Sp. z o.o.",
+    "supplier_vat_id": "PL2283715325",
+    "currency": "EUR",
+    "total_amount": "3504.26",
+    "iban": "DE75512108001245126199"
+  },
+  "invoice_037.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00037",
+    "invoice_date": "2025-01-09",
+    "supplier_name": "Riviera Shipping S.r.l.",
+    "supplier_vat_id": "IT30042603715",
+    "currency": "EUR",
+    "total_amount": "9351.76",
+    "iban": "PL61109010140000071219812874"
+  },
+  "customs_038.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE5959374114",
+    "hs_code": "330499",
+    "country_of_origin": "TW",
+    "gross_weight_kg": "9.10",
+    "declared_value": "1072.60",
+    "currency": "EUR"
+  },
+  "invoice_039_scan.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00039",
+    "invoice_date": "2025-01-13",
+    "supplier_name": "Nordwind Spedition AG",
+    "supplier_vat_id": "DE715685866",
+    "currency": "EUR",
+    "total_amount": "1274.14",
+    "iban": "NL91ABNA0417164300"
+  },
+  "invoice_040.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00040",
+    "invoice_date": "2025-08-04",
+    "supplier_name": "Riviera Shipping S.r.l.",
+    "supplier_vat_id": "IT74170322629",
+    "currency": "EUR",
+    "total_amount": "3666.29",
+    "iban": "DE75512108001245126199"
+  },
+  "customs_041.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE4292040597",
+    "hs_code": null,
+    "country_of_origin": "PL",
+    "gross_weight_kg": "47.60",
+    "declared_value": "1680.93",
+    "currency": "EUR"
+  },
+  "invoice_042.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00042",
+    "invoice_date": "2025-12-19",
+    "supplier_name": "Nordwind Spedition AG",
+    "supplier_vat_id": "DE157578771",
+    "currency": "EUR",
+    "total_amount": "1351.74",
+    "iban": "AT611904300234573201"
+  },
+  "invoice_043.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00043",
+    "invoice_date": "2025-10-05",
+    "supplier_name": "Van Dijk Freight B.V.",
+    "supplier_vat_id": "NL876313233B01",
+    "currency": "EUR",
+    "total_amount": "9392.08",
+    "iban": "IT60X0542811101000000123456"
+  },
+  "customs_044_scan.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE8324757426",
+    "hs_code": "870899",
+    "country_of_origin": "PL",
+    "gross_weight_kg": "63.70",
+    "declared_value": "327.09",
+    "currency": "EUR"
+  },
+  "invoice_045.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00045",
+    "invoice_date": "2025-07-03",
+    "supplier_name": "Baltic Forwarding Sp. z o.o.",
+    "supplier_vat_id": "PL9726233639",
+    "currency": "EUR",
+    "total_amount": "3036.12",
+    "iban": "DE75512108001245126199"
+  },
+  "invoice_046.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00046",
+    "invoice_date": "2025-12-16",
+    "supplier_name": "Baltic Forwarding Sp. z o.o.",
+    "supplier_vat_id": "PL6854481823",
+    "currency": "EUR",
+    "total_amount": "7951.82",
+    "iban": "DE75512108001245126199"
+  },
+  "customs_047.pdf": {
+    "doc_type": "customs_form",
+    "declaration_number": "25DE3482669361",
+    "hs_code": "620342",
+    "country_of_origin": "DE",
+    "gross_weight_kg": "42.40",
+    "declared_value": "936.81",
+    "currency": "EUR"
+  },
+  "invoice_048.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00048",
+    "invoice_date": "2025-12-24",
+    "supplier_name": "Van Dijk Freight B.V.",
+    "supplier_vat_id": "NL212614502B01",
+    "currency": null,
+    "total_amount": null,
+    "iban": "IT60X0542811101000000123456"
+  },
+  "invoice_049_scan.pdf": {
+    "doc_type": "invoice",
+    "invoice_number": "INV-2025-00049",
+    "invoice_date": "2025-06-20",
+    "supplier_name": "Muster Logistik GmbH",
+    "supplier_vat_id": "DE452851647",
+    "currency": "EUR",
+    "total_amount": "801.62",
+    "iban": "DE89370400440532013000"
+  }
+}

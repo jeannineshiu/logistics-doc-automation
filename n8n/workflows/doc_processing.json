@@ -1,0 +1,204 @@
+{
+  "name": "Document Processing Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "doc-upload",
+        "responseMode": "lastNode",
+        "options": {
+          "binaryPropertyName": "file"
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Document Upload",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "doc-upload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/extract",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "file"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "call-extract",
+      "name": "Call Extract API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "auto_approve",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "auto"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "human_review",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "review"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "reject",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "reject"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-decision",
+      "name": "Switch on Decision",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "content": "## Auto-approved\nDocument stored by the API with status=approved.\nReplace this NoOp with a Slack/Email node to send:\n\"Processed automatically: {{ $json.document_id }} ({{ $json.doc_type }}), confidence {{ $json.overall_confidence }}\"",
+        "height": 120,
+        "width": 320
+      },
+      "id": "note-auto",
+      "name": "Note: notify hook",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [640, -220]
+    },
+    {
+      "parameters": {},
+      "id": "auto-notify",
+      "name": "Auto: Notify (replace with Slack/Email)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [680, -80]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Document Review: {{ $json.document_id }}",
+        "formDescription": "Low-confidence fields: {{ $json.flagged_fields.join(', ') }}. Correct the values below, then submit to resume the workflow.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "corrections_json",
+              "fieldType": "textarea",
+              "requiredField": true,
+              "placeholder": "{\"field_name\": \"corrected value\"}"
+            },
+            {
+              "fieldLabel": "reviewer",
+              "fieldType": "text",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wait-approval",
+      "name": "Review: Wait for Human (Form)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [680, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://api:8000/review/{{ $('Call Extract API').item.json.document_id }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ corrected_fields: JSON.parse($json.corrections_json), reviewer: $json.reviewer }) }}",
+        "options": {}
+      },
+      "id": "submit-review",
+      "name": "Review: Submit Corrections",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 80],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {},
+      "id": "reject-alert",
+      "name": "Reject: Alert (replace with Slack/Email)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [680, 240]
+    }
+  ],
+  "connections": {
+    "Webhook: Document Upload": {
+      "main": [[{ "node": "Call Extract API", "type": "main", "index": 0 }]]
+    },
+    "Call Extract API": {
+      "main": [[{ "node": "Switch on Decision", "type": "main", "index": 0 }]]
+    },
+    "Switch on Decision": {
+      "main": [
+        [{ "node": "Auto: Notify (replace with Slack/Email)", "type": "main", "index": 0 }],
+        [{ "node": "Review: Wait for Human (Form)", "type": "main", "index": 0 }],
+        [{ "node": "Reject: Alert (replace with Slack/Email)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Review: Wait for Human (Form)": {
+      "main": [[{ "node": "Review: Submit Corrections", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: lda
+      POSTGRES_PASSWORD: lda
+      POSTGRES_DB: lda
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lda"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  api:
+    build: ./api
+    environment:
+      DATABASE_URL: postgresql+psycopg2://lda:lda@postgres:5432/lda
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      LLM_ENABLED: ${LLM_ENABLED:-1}
+      MAX_TOKENS_PER_DOC: ${MAX_TOKENS_PER_DOC:-8000}
+      MAX_LLM_CALLS_PER_DOC: ${MAX_LLM_CALLS_PER_DOC:-2}
+      AUTO_APPROVE_THRESHOLD: ${AUTO_APPROVE_THRESHOLD:-0.90}
+      REVIEW_FLOOR_THRESHOLD: ${REVIEW_FLOOR_THRESHOLD:-0.50}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    environment:
+      N8N_SECURE_COOKIE: "false"
+      GENERIC_TIMEZONE: Europe/Berlin
+    volumes:
+      - n8n_data:/home/node/.n8n
+    ports:
+      - "5678:5678"
+    depends_on:
+      - api
+
+  dashboard:
+    build: ./dashboard
+    environment:
+      API_URL: http://api:8000
+    depends_on:
+      - api
+    ports:
+      - "8501:8501"
+
+volumes:
+  pgdata:
+  n8n_data:

@@ -1,0 +1,97 @@
+"""Pydantic schemas shared across the extraction engine and API."""
+
+from enum import Enum
+
+from pydantic import BaseModel, Field
+
+
+class DocType(str, Enum):
+    INVOICE = "invoice"
+    CUSTOMS_FORM = "customs_form"
+    UNKNOWN = "unknown"
+
+
+class ExtractionMethod(str, Enum):
+    RULE = "rule"          # deterministic layer extracted it
+    LLM = "llm"            # LLM layer extracted it
+    HUMAN = "human"        # corrected by a reviewer
+    MISSING = "missing"    # neither layer extracted it
+
+
+class Decision(str, Enum):
+    AUTO_APPROVE = "auto_approve"
+    HUMAN_REVIEW = "human_review"
+    REJECT = "reject"
+
+
+class FieldResult(BaseModel):
+    value: str | None = None
+    method: ExtractionMethod = ExtractionMethod.MISSING
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+INVOICE_FIELDS = [
+    "invoice_number",
+    "invoice_date",
+    "supplier_name",
+    "supplier_vat_id",
+    "currency",
+    "total_amount",
+    "iban",
+]
+
+CUSTOMS_FIELDS = [
+    "declaration_number",
+    "hs_code",
+    "country_of_origin",
+    "gross_weight_kg",
+    "declared_value",
+    "currency",
+]
+
+
+class InvoiceFields(BaseModel):
+    invoice_number: FieldResult = FieldResult()
+    invoice_date: FieldResult = FieldResult()
+    supplier_name: FieldResult = FieldResult()
+    supplier_vat_id: FieldResult = FieldResult()
+    currency: FieldResult = FieldResult()
+    total_amount: FieldResult = FieldResult()
+    iban: FieldResult = FieldResult()
+
+
+class CustomsFields(BaseModel):
+    declaration_number: FieldResult = FieldResult()
+    hs_code: FieldResult = FieldResult()
+    country_of_origin: FieldResult = FieldResult()
+    gross_weight_kg: FieldResult = FieldResult()
+    declared_value: FieldResult = FieldResult()
+    currency: FieldResult = FieldResult()
+
+
+class ExtractionResponse(BaseModel):
+    document_id: str
+    doc_type: DocType
+    fields: InvoiceFields | CustomsFields | None
+    decision: Decision
+    overall_confidence: float
+    tokens_used: int
+    cost_usd: float
+    latency_ms: int
+    flagged_fields: list[str] = []
+
+
+class ReviewRequest(BaseModel):
+    corrected_fields: dict[str, str | None]
+    reviewer: str
+
+
+FIELD_NAMES: dict[DocType, list[str]] = {
+    DocType.INVOICE: INVOICE_FIELDS,
+    DocType.CUSTOMS_FORM: CUSTOMS_FIELDS,
+}
+
+FIELDS_MODEL: dict[DocType, type[BaseModel]] = {
+    DocType.INVOICE: InvoiceFields,
+    DocType.CUSTOMS_FORM: CustomsFields,
+}
