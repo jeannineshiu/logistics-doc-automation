@@ -43,6 +43,7 @@ docker compose up --build
 | Streamlit dashboard | http://localhost:8501 |
 | Metrics | http://localhost:8000/metrics |
 | Health (readiness) | http://localhost:8000/health |
+| Dead-letter backlog | http://localhost:8000/dead-letter |
 
 ### Operational behaviour
 
@@ -55,6 +56,11 @@ Failure handling is a design decision here, not an afterthought — each of thes
 | **Container health** | Every service has a healthcheck and `restart: unless-stopped`. With the database stopped, `api` flips to `unhealthy` after 5 failed probes (~50 s) and returns to `healthy` on its own once the database is back — no manual restart. |
 | **Transient database loss** | SQLAlchemy discards the dead connections and reconnects; requests succeed again without restarting the API. |
 | **Upstream API failure** | The n8n `Call Extract API` node retries 3× with a 3 s backoff, then fails the execution, which triggers the **Error Handler** workflow via `errorWorkflow: LogisticsErrorWf`. |
+| **Documents that fail for good** | The Error Handler writes the failure to a **dead-letter queue** (`POST /dead-letter`), so a document that exhausted every retry leaves a record instead of vanishing. `GET /dead-letter` is the requeue backlog; `dead_letter_open` in `/metrics` is the alert. |
+| **LLM request ceiling** | The OpenAI client uses a 45 s timeout and no SDK-level retries. The SDK default is 600 s with 2 retries, which outlives the n8n node's 120 s cap — n8n would abandon a request that kept generating billable tokens. Worst case is now `MAX_LLM_CALLS_PER_DOC (2) × 45 s = 90 s`, inside n8n's cap, with retrying owned by n8n alone. |
+| **Malformed reviewer input** | The HITL form's free-text JSON goes through a `Review: Validate Corrections` code node, which routes invalid input down a second branch into the dead-letter queue **with the reviewer's raw text preserved**, leaving the document `pending_review` so it can be redone. Parsing inline in the HTTP node threw a raw `SyntaxError` *after* the Wait node had been consumed — the correction was gone and the document was stranded. The node deliberately does not `throw`: n8n does not carry a thrown message across the task-runner boundary, so it arrives as `undefined [line N]` and loses the very input worth keeping. |
+
+**Known limitation, verified not assumed:** if the API is the thing that is down, the dead-letter write fails too — the Error Handler cannot record into the service it is reporting on. Stopping `api` and posting a document produces a failed execution with *no* dead-letter row; n8n's own execution history is the durable record in that window, and the dead-letter node is marked `continueRegularOutput` so the alert branch still fires. Closing that gap properly needs a broker independent of the API (Redis/SQS), which is out of scope for a single-host demo.
 | **Execution history** | `EXECUTIONS_DATA_PRUNE` with a 14-day window keeps the n8n database from growing without bound. |
 | **Credential encryption** | `N8N_ENCRYPTION_KEY` is passed through only when set, so it can be pinned on a fresh volume without invalidating an existing one. |
 
@@ -82,6 +88,13 @@ Both workflows carry fixed IDs, so the import is idempotent (re-running updates 
 ![n8n canvas: Webhook receives the document, Call Extract API runs the three-layer engine, Switch on Decision branches into auto-approve notify, human-review wait-for-form, or reject alert](docs/n8n_workflow_canvas.png)
 
 > **n8n 2.x UI notes.** Activation was renamed — the top-right toggle is **Publish**, not *Active*. The GUI importer moved inside the editor: open a workflow, then **⋯ (top right) → Import from File**; pasting the JSON onto the canvas with `Cmd+V` also works.
+>
+> **Driving the HITL form from the shell.** The form URL is signed (`?signature=…`) and the endpoint requires `multipart/form-data`; sending `application/x-www-form-urlencoded` fails the execution with *"Expected multipart/form-data"*. Fields are posted **positionally** as `field-0`, `field-1`, … — not by their labels, which arrive as `null` if you use them:
+>
+> ```bash
+> curl -X POST "http://localhost:5678/form-waiting/<id>?signature=<sig>" \
+>   -F 'field-0={"total_amount": "999.99"}' -F 'field-1=jeannine'
+> ```
 
 Send a document to the webhook:
 
@@ -165,18 +178,30 @@ Below the fold, a searchable document table and latency percentiles for debuggin
 
 ## Tests
 
-72 pytest tests, no API key needed (LLM mocked / disabled):
+88 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
+pinned so a rebuild reproduces the versions these numbers were measured on:
 
 ```bash
 pip install -r api/requirements.txt -r requirements-dev.txt
 pytest api/tests
+python n8n/validate_workflows.py   # structural checks on the committed workflow JSON
 ```
+
+The workflow JSON is treated as source: `validate_workflows.py` catches dangling
+connections from a renamed node, unreachable nodes, and an `errorWorkflow` id
+that no longer resolves — the last one is silent in n8n, which merely logs
+*"is not active and cannot be executed"* and keeps going.
+
+CI runs that suite and separately builds the images, starts the whole stack with
+`--wait`, and asserts that `/health` turns 503 when postgres is stopped. Lint and
+unit tests alone never touch the Dockerfiles or the compose file.
 
 ## Repo layout
 
 ```
 api/            FastAPI app: routers/, engine/ (rules, llm_extractor, confidence, budget), models/, tests/
 n8n/workflows/  doc_processing.json (main pipeline), error_handler.json
+n8n/            validate_workflows.py — structural checks on the workflow JSON
 data/           generate_synthetic.py, samples/, ground_truth.json
 eval/           evaluate.py — field accuracy, precision, intervention rate, cost, latency
 dashboard/      Streamlit ops view (volume, decisions, cost, latency)
