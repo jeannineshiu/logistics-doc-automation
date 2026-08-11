@@ -65,9 +65,24 @@ curl -F "file=@data/samples/invoice_000.pdf" http://localhost:8000/extract | jq
 
 ### n8n setup
 
-1. Open n8n → *Workflows → Import from file* → `n8n/workflows/doc_processing.json` and `error_handler.json`.
-2. In the main workflow's settings, set **Error Workflow** to *Error Handler*.
-3. Activate, then POST a file to the webhook URL. The `human_review` branch pauses on an **n8n Form** — the reviewer corrects the flagged fields and the workflow resumes by writing back through `POST /review/{id}`.
+Open http://localhost:5678 once to create the local owner account (stored in the `n8n_data` volume — this is the self-hosted community edition, no n8n.io account or licence needed). Then import both workflows with one command:
+
+```bash
+docker compose cp n8n/workflows/. n8n:/tmp/workflows/
+docker compose exec n8n n8n import:workflow --separate --input=/tmp/workflows
+```
+
+Both workflows carry fixed IDs, so the import is idempotent (re-running updates in place) and `doc_processing` already points its **Error Workflow** at `Error Handler` — no manual wiring. Refresh the browser, open *Document Processing Pipeline*, and hit **Active**.
+
+> n8n 2.x moved the GUI importer inside the editor: open a workflow, then **⋯ (top right) → Import from File**. Pasting the JSON onto the canvas with `Cmd+V` works too.
+
+Send a document to the webhook — pick a scan, whose fields the rule layer cannot read, so it exercises the Vision fallback and lands on the review branch:
+
+```bash
+curl -F "file=@data/samples/invoice_004_scan.pdf" http://localhost:5678/webhook/doc-upload
+```
+
+The `human_review` branch pauses on an **n8n Form** — the reviewer corrects the flagged fields and the workflow resumes by writing back through `POST /review/{id}`.
 
 > **n8n Cloud:** import the same JSON, then change the two HTTP nodes' base URL from `http://api:8000` to a publicly reachable URL for the API (e.g. a `cloudflared`/`ngrok` tunnel to `localhost:8000`).
 
