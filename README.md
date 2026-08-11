@@ -93,7 +93,7 @@ docker compose restart n8n            # publishing via CLI needs a restart to ta
 
 Both workflows carry fixed IDs, so the import is idempotent (re-running updates in place) and `doc_processing` already points its **Error Workflow** at `Error Handler` — no manual wiring. The error handler has to be published too: n8n skips an unpublished error workflow and only logs *"is not active and cannot be executed"*.
 
-![n8n canvas: Webhook receives the document, Call Extract API runs the three-layer engine, Switch on Decision branches into auto-approve notify, human-review wait-for-form, or reject alert](docs/n8n_workflow_canvas.png)
+![n8n canvas: Webhook receives the document, Call Extract API runs the three-layer engine, and Switch on Status branches three ways — auto-approve notify, reject alert, and the human-review path that waits on a form, validates the reviewer's corrections, then either submits them or records an invalid submission to the dead-letter queue](docs/n8n_workflow_canvas.png)
 
 > **n8n 2.x UI notes.** Activation was renamed — the top-right toggle is **Publish**, not *Active*. The GUI importer moved inside the editor: open a workflow, then **⋯ (top right) → Import from File**; pasting the JSON onto the canvas with `Cmd+V` also works.
 >
@@ -120,9 +120,9 @@ The `human_review` branch pauses on an **n8n Form** — the reviewer corrects th
 
 > **n8n Cloud:** import the same JSON, then change the two HTTP nodes' base URL from `http://api:8000` to a publicly reachable URL for the API (e.g. a `cloudflared`/`ngrok` tunnel to `localhost:8000`).
 
-An end-to-end run in the **Executions** tab — webhook in, rule/LLM extraction, decision switch, all green:
+A complete human-in-the-loop run in the **Executions** tab — webhook in, extraction, status switch, the reviewer's corrections validated and written back, every node on the path green:
 
-![n8n execution trace: a document flowing through Webhook → Call Extract API → Switch on Decision → Review branch, each node marked succeeded, total runtime 17.668s](docs/success_run.png)
+![n8n execution trace: execution ID#33 succeeded in 6.925s, one item flowing through Webhook → Call Extract API → Switch on Status → Review: Wait for Human (Form) → Review: Validate Corrections → Review: Corrections Valid? and out the true branch to Review: Submit Corrections, each node on the path marked succeeded](docs/success_run.png)
 
 ## Evaluation
 
