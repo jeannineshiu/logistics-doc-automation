@@ -35,8 +35,13 @@ async def extract(file: UploadFile, db: Session = Depends(get_session)):
         return _to_response(existing)
 
     document_id = str(uuid.uuid4())
-    llm_enabled = os.getenv("LLM_ENABLED", "1") == "1"
-    result = process_document(data, file.filename, document_id, llm_enabled=llm_enabled)
+    result = process_document(
+        data,
+        file.filename,
+        document_id,
+        llm_enabled=os.getenv("LLM_ENABLED", "1") == "1",
+        rules_enabled=os.getenv("RULE_LAYER_ENABLED", "1") == "1",
+    )
 
     doc = Document(
         id=document_id,

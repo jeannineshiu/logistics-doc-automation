@@ -27,7 +27,13 @@ def process_document(
     document_id: str,
     llm_client: OpenAI | None = None,
     llm_enabled: bool = True,
+    rules_enabled: bool = True,
 ) -> ExtractionResponse:
+    """Extract one document.
+
+    `rules_enabled=False` skips the deterministic layer so every field goes to
+    the LLM — the pure-LLM control group the evaluation compares against.
+    """
     start = time.monotonic()
     budget = TokenBudget()
 
@@ -39,7 +45,11 @@ def process_document(
 
     if doc_type in (DocType.INVOICE, DocType.CUSTOMS_FORM):
         # Layer 1: deterministic
-        fields = rules.run_rule_layer(text, doc_type)
+        fields = (
+            rules.run_rule_layer(text, doc_type)
+            if rules_enabled
+            else {name: FieldResult() for name in FIELD_NAMES[doc_type]}
+        )
         # Layer 2: LLM only for the gaps
         missing = [k for k, f in fields.items() if f.value is None]
         if missing and llm_enabled:

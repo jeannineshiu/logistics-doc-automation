@@ -95,20 +95,48 @@ The `human_review` branch pauses on an **n8n Form** — the reviewer corrects th
 
 ## Evaluation
 
-`python eval/evaluate.py --api http://localhost:8000` replays the corpus against ground truth.
+`python eval/evaluate.py --api http://localhost:8000` replays the corpus against ground truth (50 documents — 40 text-layer PDFs in English and German, 10 JPEG-compressed noisy scans with no text layer, 7 with a field genuinely absent).
 
-Deterministic-only baseline (`LLM_ENABLED=0`, 50 docs — 40 clean text-layer PDFs + 10 noisy scans):
+### Deterministic-first vs. a pure-LLM baseline
 
-| Metric | Result |
-|---|---|
-| Auto-approve precision | **100%** (34/34 — zero wrong documents entered the system) |
-| Field-level accuracy | 80.2% overall (**~99% on text-layer docs**; scans need the LLM) |
-| Human intervention rate | 32% (all scans + missing-field docs correctly routed to review) |
-| Rule-layer coverage | **100% of extracted fields at zero token cost** |
-| Latency p50 / p95 | 30 ms / 162 ms |
-| Cost per document | $0.00 |
+The control group runs the identical pipeline with the rule layer switched off (`RULE_LAYER_ENABLED=0`), so every field goes to GPT-4o Vision. Same corpus, same thresholds, same model:
 
-With `LLM_ENABLED=1` the 10 scanned documents route through GPT-4o Vision instead of being rejected — re-run the eval with your API key to fill in the hybrid numbers.
+| Metric | **Deterministic-first** | Pure-LLM baseline |
+|---|---|---|
+| Field-level accuracy | 99.7% (333/334) | 99.7% (333/334) |
+| Auto-approve precision | **100%** (43/43) | 100% (43/43) |
+| Human intervention rate | 14% | 14% |
+| Rule-layer coverage | **79.5%** of fields at zero token cost | 0% |
+| Cost per document | **$0.00195** | $0.00589 |
+| Latency p50 | **65 ms** | 3 768 ms |
+| Latency p95 | 5 440 ms | 5 526 ms |
+
+**Resolving 79.5% of fields deterministically cuts cost per document by 67% and median latency by 58×, at identical accuracy.** Nothing is traded away: both runs miss the same single field, and both auto-approve the same 43 documents. p95 is a wash because it is set by the scanned documents, which need the model either way — the rule layer removes the model from the *common* path, not the hard one.
+
+The number that matters most is **auto-approve precision: 100%**. Nothing incorrect was written to the database unattended.
+
+### The one field both runs got wrong — and why it never reached the database
+
+`invoice_048.pdf` is a hard sample whose total-amount line was deliberately removed. GPT-4o Vision reported `4720.55` anyway: a hallucinated total, invented for a field that does not exist in the document. Both runs made this error, because the rule layer also finds nothing to extract there and defers to the model.
+
+The pipeline still did its job. The same deletion removed the currency, the missing field dropped the document below the auto-approve floor, and it was routed to **human review** rather than written to the database. This is the case the architecture exists for: the defence against a confident wrong answer is not a better prompt, it is refusing to auto-approve anything with a gap in it.
+
+Reproduce the comparison — the control group is one env var, so both arms run the same code path:
+
+```bash
+python eval/evaluate.py --api http://localhost:8000                     # deterministic-first
+
+docker compose run --rm -d --name baseline -p 8001:8000 \
+  -e RULE_LAYER_ENABLED=0 -e DATABASE_URL=sqlite:////tmp/baseline.db api
+python eval/evaluate.py --api http://localhost:8001                     # pure-LLM control
+docker rm -f baseline
+```
+
+> Evaluate against a fresh database. `/extract` is idempotent by file hash, so a database that already holds these documents replays stored results instead of re-extracting — and any human corrections submitted through the review flow would be scored as extraction output.
+
+### Deterministic-only mode
+
+With `LLM_ENABLED=0` (no API key, no spend) the rule layer alone reaches 100% auto-approve precision on 34 documents at 30 ms p50, correctly routing all 10 scans and every missing-field document to human review — a usable extractor with zero LLM dependency, and the baseline the LLM layer is measured against.
 
 ## Idempotency & audit
 
@@ -117,7 +145,7 @@ With `LLM_ENABLED=1` the 10 scanned documents route through GPT-4o Vision instea
 
 ## Tests
 
-65 pytest tests, no API key needed (LLM mocked / disabled):
+72 pytest tests, no API key needed (LLM mocked / disabled):
 
 ```bash
 pip install -r api/requirements.txt -r requirements-dev.txt
