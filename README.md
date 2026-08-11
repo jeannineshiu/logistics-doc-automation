@@ -70,15 +70,22 @@ Open http://localhost:5678 once to create the local owner account (stored in the
 ```bash
 docker compose cp n8n/workflows/. n8n:/tmp/workflows/
 docker compose exec n8n n8n import:workflow --separate --input=/tmp/workflows
+docker compose exec n8n n8n publish:workflow --id=LogisticsDocProc
+docker compose exec n8n n8n publish:workflow --id=LogisticsErrorWf
+docker compose restart n8n            # publishing via CLI needs a restart to take effect
 ```
 
-Both workflows carry fixed IDs, so the import is idempotent (re-running updates in place) and `doc_processing` already points its **Error Workflow** at `Error Handler` — no manual wiring. Refresh the browser, open *Document Processing Pipeline*, and hit **Active**.
+Both workflows carry fixed IDs, so the import is idempotent (re-running updates in place) and `doc_processing` already points its **Error Workflow** at `Error Handler` — no manual wiring. The error handler has to be published too: n8n skips an unpublished error workflow and only logs *"is not active and cannot be executed"*.
 
-> n8n 2.x moved the GUI importer inside the editor: open a workflow, then **⋯ (top right) → Import from File**. Pasting the JSON onto the canvas with `Cmd+V` works too.
+> **n8n 2.x UI notes.** Activation was renamed — the top-right toggle is **Publish**, not *Active*. The GUI importer moved inside the editor: open a workflow, then **⋯ (top right) → Import from File**; pasting the JSON onto the canvas with `Cmd+V` also works.
 
-Send a document to the webhook — pick a scan, whose fields the rule layer cannot read, so it exercises the Vision fallback and lands on the review branch:
+Send a document to the webhook:
 
 ```bash
+# text-layer invoice → rule layer only → auto_approve, zero tokens
+curl -F "file=@data/samples/invoice_000.pdf" http://localhost:5678/webhook/doc-upload
+
+# noisy scan → no text layer → GPT-4o Vision fallback → human_review branch
 curl -F "file=@data/samples/invoice_004_scan.pdf" http://localhost:5678/webhook/doc-upload
 ```
 
