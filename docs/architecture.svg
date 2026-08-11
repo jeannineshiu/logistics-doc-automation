@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="668" viewBox="0 0 1060 668" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#71717A"/>
+    </marker>
+    <marker id="arrowDash" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#A1A1AA"/>
+    </marker>
+  </defs>
+
+  <rect width="1060" height="668" fill="#FFFFFF"/>
+
+  <!-- header -->
+  <text x="40" y="46" font-size="21" font-weight="700" fill="#18181B">logistics-doc-automation</text>
+  <text x="40" y="70" font-size="13" fill="#52525B">Deterministic-first document processing with confidence-based human-in-the-loop routing</text>
+
+  <!-- input -->
+  <rect x="40" y="150" width="150" height="70" rx="8" fill="#FFFFFF" stroke="#D4D4D8" stroke-width="1.5"/>
+  <text x="115" y="180" font-size="13.5" font-weight="600" fill="#18181B" text-anchor="middle">Document</text>
+  <text x="115" y="200" font-size="11.5" fill="#71717A" text-anchor="middle">PDF · JPG · PNG</text>
+  <line x1="190" y1="185" x2="226" y2="185" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- n8n panel -->
+  <rect x="232" y="100" width="470" height="212" rx="10" fill="#FEF2F4" stroke="#EA4B71" stroke-width="1.5"/>
+  <text x="250" y="126" font-size="12.5" font-weight="700" fill="#BE123C">n8n — orchestration</text>
+  <text x="250" y="144" font-size="11" fill="#9F1239">branching · retries · HITL form · error workflow</text>
+
+  <rect x="250" y="158" width="128" height="46" rx="6" fill="#FFFFFF" stroke="#D4D4D8" stroke-width="1.2"/>
+  <text x="314" y="180" font-size="12" font-weight="600" fill="#18181B" text-anchor="middle">Webhook</text>
+  <text x="314" y="195" font-size="10.5" fill="#71717A" text-anchor="middle">multipart upload</text>
+
+  <line x1="378" y1="181" x2="404" y2="181" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="408" y="158" width="128" height="46" rx="6" fill="#FFFFFF" stroke="#D4D4D8" stroke-width="1.2"/>
+  <text x="472" y="180" font-size="12" font-weight="600" fill="#18181B" text-anchor="middle">HTTP Request</text>
+  <text x="472" y="195" font-size="10.5" fill="#71717A" text-anchor="middle">retry ×3, backoff</text>
+
+  <line x1="536" y1="181" x2="562" y2="181" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="566" y="158" width="118" height="46" rx="6" fill="#FFFFFF" stroke="#D4D4D8" stroke-width="1.2"/>
+  <text x="625" y="180" font-size="12" font-weight="600" fill="#18181B" text-anchor="middle">Switch</text>
+  <text x="625" y="195" font-size="10.5" fill="#71717A" text-anchor="middle">on decision</text>
+
+  <!-- decision pills -->
+  <rect x="250" y="240" width="136" height="52" rx="7" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.2"/>
+  <text x="318" y="261" font-size="11.5" font-weight="700" fill="#15803D" text-anchor="middle">auto_approve</text>
+  <text x="318" y="278" font-size="10.5" fill="#166534" text-anchor="middle">stored + notify</text>
+
+  <rect x="397" y="240" width="140" height="52" rx="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1.2"/>
+  <text x="467" y="261" font-size="11.5" font-weight="700" fill="#B45309" text-anchor="middle">human_review</text>
+  <text x="467" y="278" font-size="10.5" fill="#92400E" text-anchor="middle">pauses on form</text>
+
+  <rect x="548" y="240" width="136" height="52" rx="7" fill="#FEE2E2" stroke="#DC2626" stroke-width="1.2"/>
+  <text x="616" y="261" font-size="11.5" font-weight="700" fill="#B91C1C" text-anchor="middle">reject</text>
+  <text x="616" y="278" font-size="10.5" fill="#991B1B" text-anchor="middle">alert ops</text>
+
+  <line x1="625" y1="204" x2="625" y2="236" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M 566 181 L 552 181" stroke="none" fill="none"/>
+
+  <!-- reviewer box -->
+  <rect x="736" y="158" width="284" height="98" rx="9" fill="#FFFBEB" stroke="#D97706" stroke-width="1.5"/>
+  <text x="754" y="182" font-size="12.5" font-weight="700" fill="#B45309">Human reviewer</text>
+  <text x="754" y="202" font-size="11" fill="#78350F">n8n Form shows the flagged fields;</text>
+  <text x="754" y="219" font-size="11" fill="#78350F">corrections resume the workflow and</text>
+  <text x="754" y="236" font-size="11" fill="#78350F">write back via POST /review/{id}</text>
+  <line x1="537" y1="266" x2="732" y2="222" stroke="#D97706" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- vertical link n8n -> api -->
+  <line x1="472" y1="312" x2="472" y2="356" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="484" y="339" font-size="11" font-weight="600" fill="#3F3F46">POST /extract</text>
+
+  <!-- fastapi panel -->
+  <rect x="232" y="360" width="470" height="222" rx="10" fill="#ECFDF5" stroke="#059669" stroke-width="1.5"/>
+  <text x="250" y="386" font-size="12.5" font-weight="700" fill="#047857">FastAPI — computation</text>
+  <text x="250" y="404" font-size="11" fill="#065F46">unit-tested in Python, kept out of the n8n nodes</text>
+
+  <rect x="250" y="416" width="434" height="48" rx="6" fill="#FFFFFF" stroke="#A7F3D0" stroke-width="1.2"/>
+  <text x="264" y="436" font-size="11.5" font-weight="700" fill="#18181B">1 · Rule layer</text>
+  <text x="264" y="453" font-size="10.5" fill="#52525B">regex + IBAN checksum on the text layer — 79.5% of fields, zero tokens</text>
+
+  <rect x="250" y="472" width="434" height="48" rx="6" fill="#FFFFFF" stroke="#A7F3D0" stroke-width="1.2"/>
+  <text x="264" y="492" font-size="11.5" font-weight="700" fill="#18181B">2 · GPT-4o Vision</text>
+  <text x="264" y="509" font-size="10.5" fill="#52525B">asked only for the fields layer 1 missed — token budget enforced as a hard cap</text>
+
+  <rect x="250" y="528" width="434" height="42" rx="6" fill="#FFFFFF" stroke="#A7F3D0" stroke-width="1.2"/>
+  <text x="264" y="547" font-size="11.5" font-weight="700" fill="#18181B">3 · Confidence router</text>
+  <text x="264" y="562" font-size="10.5" fill="#52525B">every field ≥ 0.90 auto-approves; a gap or a low score goes to a human</text>
+
+  <!-- right column outputs -->
+  <rect x="736" y="360" width="284" height="66" rx="8" fill="#F4F4F5" stroke="#D4D4D8" stroke-width="1.3"/>
+  <text x="754" y="384" font-size="12" font-weight="700" fill="#18181B">PostgreSQL</text>
+  <text x="754" y="403" font-size="10.5" fill="#52525B">documents + audit_log (every change,</text>
+  <text x="754" y="418" font-size="10.5" fill="#52525B">machine or human, with field diffs)</text>
+
+  <rect x="736" y="440" width="284" height="54" rx="8" fill="#F4F4F5" stroke="#D4D4D8" stroke-width="1.3"/>
+  <text x="754" y="463" font-size="12" font-weight="700" fill="#18181B">Streamlit dashboard</text>
+  <text x="754" y="481" font-size="10.5" fill="#52525B">volume · decisions · cost · latency</text>
+
+  <rect x="736" y="508" width="284" height="54" rx="8" fill="#F4F4F5" stroke="#D4D4D8" stroke-width="1.3"/>
+  <text x="754" y="531" font-size="12" font-weight="700" fill="#18181B">/metrics</text>
+  <text x="754" y="549" font-size="10.5" fill="#52525B">Prometheus text format</text>
+
+  <line x1="702" y1="393" x2="732" y2="393" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="702" y1="467" x2="732" y2="467" stroke="#A1A1AA" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrowDash)"/>
+  <line x1="702" y1="535" x2="732" y2="535" stroke="#A1A1AA" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrowDash)"/>
+
+  <!-- results strip -->
+  <rect x="40" y="606" width="980" height="42" rx="8" fill="#18181B"/>
+  <text x="60" y="632" font-size="11.5" fill="#FAFAFA">
+    <tspan font-weight="700">Measured over 50 documents · </tspan>
+    <tspan>99.7% field accuracy</tspan>
+    <tspan fill="#71717A"> · </tspan>
+    <tspan>100% auto-approve precision</tspan>
+    <tspan fill="#71717A"> · </tspan>
+    <tspan font-weight="700" fill="#4ADE80">67% cheaper</tspan>
+    <tspan> and </tspan>
+    <tspan font-weight="700" fill="#4ADE80">58× faster median</tspan>
+    <tspan> than a pure-LLM baseline, at identical accuracy</tspan>
+  </text>
+</svg>

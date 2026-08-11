@@ -6,20 +6,7 @@
 
 ## Architecture
 
-```
- PDF/JPG/PNG ──► n8n Webhook ──► POST /extract ──► Switch on decision
-                                     │                ├─ auto_approve  → stored (status=approved) + notify
-                                     │                ├─ human_review  → n8n Form (HITL) → POST /review/{id}
-                                     │                └─ reject        → alert
-                                     ▼
-                     ┌────────────────────────────────────┐
-                     │  Extraction engine (FastAPI)       │
-                     │  1. Rule layer (regex + checksum)  │  ← zero tokens, zero latency
-                     │  2. GPT-4o Vision (gaps only)      │  ← token-budget hard cap
-                     │  3. Confidence scorer & router     │  ← thresholds are env vars
-                     └────────────────────────────────────┘
-                        PostgreSQL (documents + audit log) · Streamlit dashboard · /metrics (Prometheus)
-```
+![Architecture: documents enter through an n8n webhook, are extracted by a three-layer FastAPI engine, and are routed to auto-approval, human review, or rejection](docs/architecture.svg)
 
 **Separation of concerns:** n8n owns orchestration (branching, retries, HITL forms, error workflow); Python owns computation (extraction, validation, scoring) where it is unit-testable. n8n nodes stay thin.
 
