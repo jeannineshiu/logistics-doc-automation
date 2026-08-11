@@ -42,7 +42,10 @@ jobs:
           curl -fsS http://localhost:8000/metrics | grep -q dead_letter_open
       - name: Extraction works end to end
         run: |
-          pip install -r requirements-dev.txt
+          # The generator needs pypdfium2 and pillow to rasterise the scan
+          # variants, and those are runtime deps in api/requirements.txt —
+          # requirements-dev.txt alone leaves it with an ImportError.
+          pip install -r api/requirements.txt -r requirements-dev.txt
           python data/generate_synthetic.py --count 3
           curl -fsS -F "file=@data/samples/invoice_000.pdf" \
             http://localhost:8000/extract | grep -q '"doc_type":"invoice"'
