@@ -15,6 +15,45 @@ jobs:
         run: |
           pip install -r api/requirements.txt -r requirements-dev.txt
       - name: Lint
-        run: ruff check api data eval
+        run: ruff check api data eval n8n
+      - name: Validate n8n workflows
+        run: python n8n/validate_workflows.py
       - name: Tests
         run: pytest api/tests -v
+
+  stack:
+    # Lint and unit tests never touch the images or the compose file, so a
+    # broken Dockerfile or an unstartable stack used to reach main unnoticed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose file
+        run: docker compose config --quiet
+      - name: Build images
+        run: docker compose build api dashboard
+      - name: Start stack
+        run: docker compose up -d --wait --wait-timeout 180
+        env:
+          LLM_ENABLED: "0"
+      - name: Health checks report ready
+        run: |
+          curl -fsS http://localhost:8000/live
+          curl -fsS http://localhost:8000/health
+          curl -fsS http://localhost:8000/metrics | grep -q dead_letter_open
+      - name: Extraction works end to end
+        run: |
+          pip install -r requirements-dev.txt
+          python data/generate_synthetic.py --count 3
+          curl -fsS -F "file=@data/samples/invoice_000.pdf" \
+            http://localhost:8000/extract | grep -q '"doc_type":"invoice"'
+      - name: Health turns 503 when the database is gone
+        run: |
+          docker compose stop postgres
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 http://localhost:8000/health)
+          test "$code" = "503" || { echo "expected 503, got $code"; exit 1; }
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

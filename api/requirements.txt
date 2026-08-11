@@ -1,11 +1,14 @@
-fastapi>=0.115
-uvicorn[standard]>=0.30
-pydantic>=2.8
-python-multipart>=0.0.9
-openai>=1.40
-sqlalchemy>=2.0
-psycopg2-binary>=2.9
-pypdfium2>=4.30
-pillow>=10.4
-python-dateutil>=2.9
-schwifty>=2024.6.1
+# Pinned to the versions this project was built and measured against, so a
+# rebuild months from now produces the same image rather than silently picking
+# up a new major of openai or sqlalchemy.
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+pydantic==2.13.4
+python-multipart==0.0.32
+openai==2.53.0
+sqlalchemy==2.0.51
+psycopg2-binary==2.9.12
+pypdfium2==5.12.1
+pillow==12.3.0
+python-dateutil==2.9.0.post0
+schwifty==2026.7.3
