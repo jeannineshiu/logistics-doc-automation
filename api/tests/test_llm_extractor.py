@@ -1,6 +1,7 @@
 """LLM layer tests with a fake OpenAI client — no tokens spent."""
 
 import json
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -103,3 +104,18 @@ def test_prompt_only_asks_missing_fields():
     p = build_prompt(DocType.INVOICE, ["iban", "supplier_name"])
     assert "iban" in p and "supplier_name" in p
     assert "invoice_number" not in p
+
+
+def test_client_bounds_request_time_below_the_n8n_ceiling(monkeypatch):
+    """n8n caps the extract call at 120s and owns retrying. If the SDK also
+    retried behind its 600s default, n8n would abandon a request that keeps
+    generating billable tokens."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    from engine.llm_extractor import LLM_TIMEOUT_SECONDS, _client
+
+    client = _client()
+    assert client.max_retries == 0
+    assert client.timeout == LLM_TIMEOUT_SECONDS
+
+    max_calls = int(os.getenv("MAX_LLM_CALLS_PER_DOC", "2"))
+    assert max_calls * LLM_TIMEOUT_SECONDS < 120, "worst case must stay under n8n's timeout"

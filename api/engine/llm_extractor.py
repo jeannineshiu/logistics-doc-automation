@@ -15,6 +15,16 @@ from engine.pdf_utils import to_data_url
 
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 
+# Per-request ceiling. The SDK defaults to 600 s and 2 internal retries, which
+# outlives the 120 s cap on the n8n HTTP node calling us: n8n would give up,
+# re-send the document, and the abandoned request would keep generating
+# billable tokens for an answer nobody reads.
+#
+# Retries are n8n's job — it already retries 3x with backoff — so the SDK does
+# none. That keeps the worst case bounded and arithmetically under n8n's cap:
+#   MAX_LLM_CALLS_PER_DOC (2) x LLM_TIMEOUT_SECONDS (45) = 90 s < 120 s
+LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "45"))
+
 # USD per 1M tokens (gpt-4o, 2025 pricing) — used for cost reporting only
 PRICE_INPUT = 2.50 / 1_000_000
 PRICE_OUTPUT = 10.00 / 1_000_000
@@ -36,7 +46,7 @@ FIELD_HINTS = {
 
 
 def _client() -> OpenAI:
-    return OpenAI()
+    return OpenAI(timeout=LLM_TIMEOUT_SECONDS, max_retries=0)
 
 
 def build_prompt(doc_type: DocType, missing_fields: list[str]) -> str:
