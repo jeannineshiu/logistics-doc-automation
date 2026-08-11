@@ -114,6 +114,45 @@ def test_review_wrong_status_conflict(client, invoice_pdf):
     assert resp.status_code == 409
 
 
+def test_replay_reports_current_status_not_the_frozen_decision(client):
+    """Re-sending an already-approved document used to route back into review.
+
+    /extract is idempotent by file hash and replayed the stored `decision`,
+    which stays `human_review` forever. Orchestration branched on that, sent a
+    resolved document to the HITL form again, and the write-back 409'd —
+    producing a spurious review task and a spurious dead-letter entry.
+    """
+    from tests.conftest import make_pdf
+
+    # No IBAN and no VAT id, so the rule layer leaves gaps and it needs review.
+    pdf = make_pdf(["INVOICE", "Invoice No: INV-2025-00099", "Supplier: Gap GmbH"])
+
+    first = _upload(client, pdf, "replay.pdf").json()
+    assert first["decision"] == "human_review"
+    assert first["status"] == "pending_review"
+
+    resp = client.post(
+        f"/review/{first['document_id']}",
+        json={"corrected_fields": {}, "reviewer": "jeannine"},
+    )
+    assert resp.status_code == 200
+
+    replay = _upload(client, pdf, "replay.pdf").json()
+    assert replay["document_id"] == first["document_id"]
+    assert replay["decision"] == "human_review", "the engine's decision is a historical record"
+    assert replay["status"] == "approved", "but the current disposition must be reported"
+
+
+def test_fresh_extraction_derives_status_from_decision(client, invoice_pdf):
+    body = _upload(client, invoice_pdf).json()
+    expected = {
+        "auto_approve": "approved",
+        "human_review": "pending_review",
+        "reject": "rejected",
+    }[body["decision"]]
+    assert body["status"] == expected
+
+
 def test_metrics_endpoint(client, invoice_pdf):
     _upload(client, invoice_pdf)
     text = client.get("/metrics").text

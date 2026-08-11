@@ -5,19 +5,13 @@ import uuid
 from engine.pipeline import process_document
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from models.db import AuditLog, Document, get_session
-from models.schemas import Decision, ExtractionResponse
+from models.schemas import DECISION_STATUS, ExtractionResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 router = APIRouter(tags=["extract"])
 
 ALLOWED_EXT = (".pdf", ".jpg", ".jpeg", ".png")
-
-DECISION_STATUS = {
-    Decision.AUTO_APPROVE: "approved",
-    Decision.HUMAN_REVIEW: "pending_review",
-    Decision.REJECT: "rejected",
-}
 
 
 @router.post("/extract", response_model=ExtractionResponse)
@@ -48,7 +42,7 @@ async def extract(file: UploadFile, db: Session = Depends(get_session)):
         file_hash=file_hash,
         filename=file.filename,
         doc_type=result.doc_type.value,
-        status=DECISION_STATUS[result.decision],
+        status=DECISION_STATUS[result.decision].value,
         decision=result.decision.value,
         fields=result.fields.model_dump() if result.fields else {},
         overall_confidence=result.overall_confidence,
@@ -72,11 +66,18 @@ async def extract(file: UploadFile, db: Session = Depends(get_session)):
 
 
 def _to_response(doc: Document) -> ExtractionResponse:
+    """Replay of a stored document.
+
+    `status` comes from the row, not from `decision`: once a reviewer has acted
+    the two diverge, and reporting the frozen decision is what sent already
+    approved documents back through the review branch to a 409.
+    """
     return ExtractionResponse(
         document_id=doc.id,
         doc_type=doc.doc_type,
         fields=doc.fields or None,
         decision=doc.decision,
+        status=doc.status,
         overall_confidence=doc.overall_confidence,
         tokens_used=doc.tokens_used,
         cost_usd=doc.cost_usd,

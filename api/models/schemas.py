@@ -2,7 +2,7 @@
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class DocType(str, Enum):
@@ -22,6 +22,22 @@ class Decision(str, Enum):
     AUTO_APPROVE = "auto_approve"
     HUMAN_REVIEW = "human_review"
     REJECT = "reject"
+
+
+class Status(str, Enum):
+    APPROVED = "approved"
+    PENDING_REVIEW = "pending_review"
+    REJECTED = "rejected"
+
+
+# What the routing decision means for a freshly extracted document. After a
+# reviewer acts, `status` moves on but `decision` stays as the historical
+# record of what the engine decided.
+DECISION_STATUS: dict[Decision, Status] = {
+    Decision.AUTO_APPROVE: Status.APPROVED,
+    Decision.HUMAN_REVIEW: Status.PENDING_REVIEW,
+    Decision.REJECT: Status.REJECTED,
+}
 
 
 class FieldResult(BaseModel):
@@ -74,11 +90,22 @@ class ExtractionResponse(BaseModel):
     doc_type: DocType
     fields: InvoiceFields | CustomsFields | None
     decision: Decision
+    #: Current disposition. `decision` is frozen at extraction time, so a
+    #: document replayed through /extract after a reviewer approved it still
+    #: reports decision=human_review — orchestration must branch on this
+    #: instead, or it sends resolved documents back into the review queue.
+    status: Status | None = None
     overall_confidence: float
     tokens_used: int
     cost_usd: float
     latency_ms: int
     flagged_fields: list[str] = []
+
+    @model_validator(mode="after")
+    def _default_status_from_decision(self):
+        if self.status is None:
+            self.status = DECISION_STATUS[self.decision]
+        return self
 
 
 class ReviewRequest(BaseModel):

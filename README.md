@@ -21,11 +21,19 @@ Fields with a fixed format (IBAN, VAT ID, dates, HS codes, amounts) are extracte
 
 ### Confidence-based routing
 
-| Decision | Condition |
-|---|---|
-| `auto_approve` | every field present with confidence ≥ 0.90 |
-| `human_review` | any field missing, below 0.90, or budget exceeded |
-| `reject` | document type unrecognizable (confidence < 0.6) |
+| Decision | Condition | Resulting status |
+|---|---|---|
+| `auto_approve` | every field present with confidence ≥ 0.90 | `approved` |
+| `human_review` | any field missing, below 0.90, or budget exceeded | `pending_review` |
+| `reject` | document type unrecognizable (confidence < 0.6) | `rejected` |
+
+`decision` is what the engine concluded at extraction time and never changes —
+it is the audit record. `status` is the document's current disposition and moves
+when a reviewer acts. **Orchestration branches on `status`**: because `/extract`
+is idempotent by file hash, re-sending an already-reviewed document replays its
+stored `decision`, which is still `human_review`. Branching on that sent
+resolved documents back to the review form, where the write-back failed with a
+409 and produced a spurious review task and dead-letter entry.
 
 Thresholds are env vars because they're a **business decision**: raising `AUTO_APPROVE_THRESHOLD` trades a higher human-intervention rate for a lower rate of wrong data entering the system.
 
@@ -178,7 +186,7 @@ Below the fold, a searchable document table and latency percentiles for debuggin
 
 ## Tests
 
-88 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
+90 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
 pinned so a rebuild reproduces the versions these numbers were measured on:
 
 ```bash

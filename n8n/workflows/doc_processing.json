@@ -15,7 +15,10 @@
       "name": "Webhook: Document Upload",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0],
+      "position": [
+        0,
+        0
+      ],
       "webhookId": "doc-upload"
     },
     {
@@ -41,7 +44,10 @@
       "name": "Call Extract API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [220, 0],
+      "position": [
+        220,
+        0
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 3000
@@ -52,12 +58,18 @@
           "values": [
             {
               "conditions": {
-                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.decision }}",
-                    "rightValue": "auto_approve",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "approved",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -67,12 +79,18 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.decision }}",
-                    "rightValue": "human_review",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "pending_review",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -82,12 +100,18 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "options": {
+                  "caseSensitive": true,
+                  "typeValidation": "strict"
+                },
                 "conditions": [
                   {
-                    "leftValue": "={{ $json.decision }}",
-                    "rightValue": "reject",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "rejected",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -100,10 +124,13 @@
         "options": {}
       },
       "id": "switch-decision",
-      "name": "Switch on Decision",
+      "name": "Switch on Status",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [440, 0]
+      "position": [
+        440,
+        0
+      ]
     },
     {
       "parameters": {
@@ -115,7 +142,10 @@
       "name": "Note: notify hook",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [640, -220]
+      "position": [
+        640,
+        -220
+      ]
     },
     {
       "parameters": {},
@@ -123,7 +153,10 @@
       "name": "Auto: Notify (replace with Slack/Email)",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [680, -80]
+      "position": [
+        680,
+        -80
+      ]
     },
     {
       "parameters": {
@@ -151,28 +184,41 @@
       "name": "Review: Wait for Human (Form)",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [680, 80]
+      "position": [
+        680,
+        80
+      ]
     },
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "// The reviewer types free-form JSON into a textarea. Parsing it inline in\n// the HTTP node meant a stray comma threw a raw SyntaxError, failing the\n// execution after the Wait node had already been consumed — the correction\n// was gone and the document sat in pending_review with no way to resume.\n//\n// This node deliberately never throws. A thrown Error does reach the error\n// workflow, but n8n does not carry the message across the task-runner\n// boundary — it arrives as \"undefined [line N]\", losing the very input we are\n// trying to preserve. So invalid input becomes a normal item with valid=false\n// and is routed to the dead-letter queue with the raw text intact.\n//\n// Runs per item: $json is only bound in runOnceForEachItem mode.\nconst raw = $json.corrections_json;\nconst reviewer = $json.reviewer;\n\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (err) {\n  return { json: { valid: false, reviewer, raw, error: `invalid JSON: ${err.message}` } };\n}\n\nif (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {\n  const got = Array.isArray(parsed) ? 'an array' : typeof parsed;\n  return {\n    json: {\n      valid: false,\n      reviewer,\n      raw,\n      error: `corrections must be a JSON object mapping field name to value, got ${got}`,\n    },\n  };\n}\n\nreturn { json: { valid: true, corrected_fields: parsed, reviewer } };"
+        "jsCode": "// The reviewer types free-form JSON into a textarea. Parsing it inline in\n// the HTTP node meant a stray comma threw a raw SyntaxError, failing the\n// execution after the Wait node had already been consumed \u2014 the correction\n// was gone and the document sat in pending_review with no way to resume.\n//\n// This node deliberately never throws. A thrown Error does reach the error\n// workflow, but n8n does not carry the message across the task-runner\n// boundary \u2014 it arrives as \"undefined [line N]\", losing the very input we are\n// trying to preserve. So invalid input becomes a normal item with valid=false\n// and is routed to the dead-letter queue with the raw text intact.\n//\n// Runs per item: $json is only bound in runOnceForEachItem mode.\nconst raw = $json.corrections_json;\nconst reviewer = $json.reviewer;\n\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (err) {\n  return { json: { valid: false, reviewer, raw, error: `invalid JSON: ${err.message}` } };\n}\n\nif (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {\n  const got = Array.isArray(parsed) ? 'an array' : typeof parsed;\n  return {\n    json: {\n      valid: false,\n      reviewer,\n      raw,\n      error: `corrections must be a JSON object mapping field name to value, got ${got}`,\n    },\n  };\n}\n\nreturn { json: { valid: true, corrected_fields: parsed, reviewer } };"
       },
       "id": "validate-corrections",
       "name": "Review: Validate Corrections",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 80]
+      "position": [
+        900,
+        80
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "leftValue": "={{ $json.valid }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
           ],
           "combinator": "and"
@@ -183,7 +229,10 @@
       "name": "Review: Corrections Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1120, 80]
+      "position": [
+        1120,
+        80
+      ]
     },
     {
       "parameters": {
@@ -192,13 +241,18 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ workflow_name: $workflow.name, execution_id: String($execution.id) + '-review', node_name: 'Review: Validate Corrections', error_message: $json.error, payload: { reviewer: $json.reviewer, submitted: $json.raw, document_id: $('Call Extract API').item.json.document_id } }) }}",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "record-invalid-correction",
       "name": "Review: Record Invalid Correction",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 200],
+      "position": [
+        1340,
+        200
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 3000
@@ -210,13 +264,18 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
-        "options": { "timeout": 30000 }
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "submit-review",
       "name": "Review: Submit Corrections",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, -40],
+      "position": [
+        1340,
+        -40
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 3000
@@ -227,33 +286,98 @@
       "name": "Reject: Alert (replace with Slack/Email)",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [680, 240]
+      "position": [
+        680,
+        240
+      ]
     }
   ],
   "connections": {
     "Webhook: Document Upload": {
-      "main": [[{ "node": "Call Extract API", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Call Extract API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Call Extract API": {
-      "main": [[{ "node": "Switch on Decision", "type": "main", "index": 0 }]]
-    },
-    "Switch on Decision": {
       "main": [
-        [{ "node": "Auto: Notify (replace with Slack/Email)", "type": "main", "index": 0 }],
-        [{ "node": "Review: Wait for Human (Form)", "type": "main", "index": 0 }],
-        [{ "node": "Reject: Alert (replace with Slack/Email)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Switch on Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Review: Wait for Human (Form)": {
-      "main": [[{ "node": "Review: Validate Corrections", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Review: Validate Corrections",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Review: Validate Corrections": {
-      "main": [[{ "node": "Review: Corrections Valid?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Review: Corrections Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Review: Corrections Valid?": {
       "main": [
-        [{ "node": "Review: Submit Corrections", "type": "main", "index": 0 }],
-        [{ "node": "Review: Record Invalid Correction", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Review: Submit Corrections",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Review: Record Invalid Correction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch on Status": {
+      "main": [
+        [
+          {
+            "node": "Auto: Notify (replace with Slack/Email)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Review: Wait for Human (Form)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject: Alert (replace with Slack/Email)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
