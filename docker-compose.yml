@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: lda
       POSTGRES_PASSWORD: lda
@@ -17,6 +18,7 @@ services:
 
   api:
     build: ./api
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg2://lda:lda@postgres:5432/lda
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -30,27 +32,60 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # /health reaches the database, so an unhealthy mark here means the API
+    # genuinely cannot serve — that is what n8n and the dashboard wait on.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     ports:
       - "8000:8000"
 
   n8n:
     image: docker.n8n.io/n8nio/n8n
+    restart: unless-stopped
     environment:
       N8N_SECURE_COOKIE: "false"
       GENERIC_TIMEZONE: Europe/Berlin
+      # Pin the credential encryption key. Left unset, n8n generates one into
+      # the volume — losing the volume makes every stored credential
+      # permanently undecryptable. Pass-through form (no default): the variable
+      # is only injected when set, so an existing volume that already carries a
+      # generated key is not invalidated by a mismatching value.
+      N8N_ENCRYPTION_KEY:
+      # Keep the execution history from growing without bound.
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "336"
     volumes:
       - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5678/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     ports:
       - "5678:5678"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
   dashboard:
     build: ./dashboard
+    restart: unless-stopped
     environment:
       API_URL: http://api:8000
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     ports:
       - "8501:8501"
 

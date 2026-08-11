@@ -6,8 +6,37 @@ def _upload(client, pdf_bytes, name="doc.pdf"):
     return client.post("/extract", files={"file": (name, pdf_bytes, "application/pdf")})
 
 
-def test_health(client):
-    assert client.get("/health").json() == {"status": "ok"}
+def test_live(client):
+    assert client.get("/live").json() == {"status": "ok"}
+
+
+def test_health_ok_when_database_reachable(client):
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "database": "ok"}
+
+
+def test_health_503_when_database_unreachable(client):
+    """The regression this endpoint exists for: /health must not report ok
+    while the database is down — see the docstring in main.health."""
+    from main import app
+    from models.db import get_session
+    from sqlalchemy.exc import OperationalError
+
+    def broken_session():
+        class Broken:
+            def execute(self, *_a, **_kw):
+                raise OperationalError("SELECT 1", {}, Exception("connection refused"))
+
+        yield Broken()
+
+    app.dependency_overrides[get_session] = broken_session
+    try:
+        resp = client.get("/health")
+        assert resp.status_code == 503
+        assert resp.json()["status"] == "unavailable"
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_extract_invoice_rule_layer(client, invoice_pdf):
