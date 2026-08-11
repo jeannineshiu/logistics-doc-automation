@@ -39,7 +39,7 @@
 
   <rect x="566" y="158" width="118" height="46" rx="6" fill="#FFFFFF" stroke="#D4D4D8" stroke-width="1.2"/>
   <text x="625" y="180" font-size="12" font-weight="600" fill="#18181B" text-anchor="middle">Switch</text>
-  <text x="625" y="195" font-size="10.5" fill="#71717A" text-anchor="middle">on decision</text>
+  <text x="625" y="195" font-size="10.5" fill="#71717A" text-anchor="middle">on status</text>
 
   <!-- decision pills -->
   <rect x="250" y="240" width="136" height="52" rx="7" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.2"/>
@@ -114,7 +114,7 @@
     <tspan fill="#71717A"> · </tspan>
     <tspan font-weight="700" fill="#4ADE80">67% cheaper</tspan>
     <tspan> and </tspan>
-    <tspan font-weight="700" fill="#4ADE80">58× faster median</tspan>
+    <tspan font-weight="700" fill="#4ADE80">~60× faster median</tspan>
     <tspan> than a pure-LLM baseline, at identical accuracy</tspan>
   </text>
 </svg>

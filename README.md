@@ -12,7 +12,7 @@
 
 ### Why deterministic-first?
 
-Fields with a fixed format (IBAN, VAT ID, dates, HS codes, amounts) are extracted from the PDF text layer with regexes and *validated* — an IBAN that passes its checksum is mathematically correct and gets confidence 1.0 without spending a single token. The LLM is only called for the fields the rule layer missed, and only asked for those fields. Result on the synthetic corpus: **100% of text-layer fields resolved by rules at zero cost**; the LLM budget is reserved for the hard cases (noisy scans, handwriting).
+Fields with a fixed format (IBAN, VAT ID, dates, HS codes, amounts) are extracted from the PDF text layer with regexes and *validated* — an IBAN that passes its checksum is mathematically correct and gets confidence 1.0 without spending a single token. The LLM is only called for the fields the rule layer missed, and only asked for those fields. Result on the synthetic corpus: **every field actually present in a text layer is resolved by rules at zero cost** — 34 of the 40 text-layer documents never call the model at all. The six that do are the ones with a field deliberately deleted: rules find nothing to extract for a value that is not there, so it escalates. The LLM budget goes to those and to the hard cases (noisy scans, handwriting).
 
 ### Cost governance in code, not prompts
 
@@ -67,10 +67,10 @@ Failure handling is a design decision here, not an afterthought — each of thes
 | **Documents that fail for good** | The Error Handler writes the failure to a **dead-letter queue** (`POST /dead-letter`), so a document that exhausted every retry leaves a record instead of vanishing. `GET /dead-letter` is the requeue backlog; `dead_letter_open` in `/metrics` is the alert. |
 | **LLM request ceiling** | The OpenAI client uses a 45 s timeout and no SDK-level retries. The SDK default is 600 s with 2 retries, which outlives the n8n node's 120 s cap — n8n would abandon a request that kept generating billable tokens. Worst case is now `MAX_LLM_CALLS_PER_DOC (2) × 45 s = 90 s`, inside n8n's cap, with retrying owned by n8n alone. |
 | **Malformed reviewer input** | The HITL form's free-text JSON goes through a `Review: Validate Corrections` code node, which routes invalid input down a second branch into the dead-letter queue **with the reviewer's raw text preserved**, leaving the document `pending_review` so it can be redone. Parsing inline in the HTTP node threw a raw `SyntaxError` *after* the Wait node had been consumed — the correction was gone and the document was stranded. The node deliberately does not `throw`: n8n does not carry a thrown message across the task-runner boundary, so it arrives as `undefined [line N]` and loses the very input worth keeping. |
-
-**Known limitation, verified not assumed:** if the API is the thing that is down, the dead-letter write fails too — the Error Handler cannot record into the service it is reporting on. Stopping `api` and posting a document produces a failed execution with *no* dead-letter row; n8n's own execution history is the durable record in that window, and the dead-letter node is marked `continueRegularOutput` so the alert branch still fires. Closing that gap properly needs a broker independent of the API (Redis/SQS), which is out of scope for a single-host demo.
 | **Execution history** | `EXECUTIONS_DATA_PRUNE` with a 14-day window keeps the n8n database from growing without bound. |
 | **Credential encryption** | `N8N_ENCRYPTION_KEY` is passed through only when set, so it can be pinned on a fresh volume without invalidating an existing one. |
+
+**Known limitation, verified not assumed:** if the API is the thing that is down, the dead-letter write fails too — the Error Handler cannot record into the service it is reporting on. Stopping `api` and posting a document produces a failed execution with *no* dead-letter row; n8n's own execution history is the durable record in that window, and the dead-letter node is marked `continueRegularOutput` so the alert branch still fires. Closing that gap properly needs a broker independent of the API (Redis/SQS), which is out of scope for a single-host demo.
 
 Generate the synthetic test corpus (50 docs: EN/DE invoices, CN22/23-style customs forms, noisy scans, missing-field variants) and try one:
 
@@ -110,8 +110,12 @@ Send a document to the webhook:
 # text-layer invoice → rule layer only → auto_approve, zero tokens
 curl -F "file=@data/samples/invoice_000.pdf" http://localhost:5678/webhook/doc-upload
 
-# noisy scan → no text layer → GPT-4o Vision fallback → human_review branch
+# noisy scan → no text layer → GPT-4o Vision fallback → ~1 600 tokens.
+# Vision reads this one cleanly, so it still auto-approves.
 curl -F "file=@data/samples/invoice_004_scan.pdf" http://localhost:5678/webhook/doc-upload
+
+# a scan Vision is not confident about → human_review branch, pauses on the form
+curl -F "file=@data/samples/invoice_034_scan.pdf" http://localhost:5678/webhook/doc-upload
 ```
 
 The `human_review` branch pauses on an **n8n Form** — the reviewer corrects the flagged fields and the workflow resumes by writing back through `POST /review/{id}`.
@@ -136,7 +140,7 @@ It now takes the validation node's **false** branch instead. The execution succe
 
 `raw` still holds `{"gross_weight_kg": "1240.5",}` — the trailing comma and all — and the API returns the row it created (`id 2`, `status open`). `GET /dead-letter` returns the same record with the `document_id` attached. The document stays `pending_review`, so the review can be redone from what the reviewer actually typed rather than from memory.
 
-> **n8n Cloud:** import the same JSON, then change the two HTTP nodes' base URL from `http://api:8000` to a publicly reachable URL for the API (e.g. a `cloudflared`/`ngrok` tunnel to `localhost:8000`).
+> **n8n Cloud:** import the same JSON, then change the base URL from `http://api:8000` to a publicly reachable URL for the API (e.g. a `cloudflared`/`ngrok` tunnel to `localhost:8000`) in all four HTTP nodes — `Call Extract API`, `Review: Submit Corrections` and `Review: Record Invalid Correction` in the pipeline, plus `Record to Dead Letter` in the error workflow.
 
 A complete human-in-the-loop run in the **Executions** tab — webhook in, extraction, status switch, the reviewer's corrections validated and written back, every node on the path green:
 
@@ -160,7 +164,7 @@ The control group runs the identical pipeline with the rule layer switched off (
 | Latency p50 | **66 ms** | 4 098 ms |
 | Latency p95 | 6 962 ms | 5 475 ms |
 
-**Resolving 79.5% of fields deterministically cuts cost per document by 67% and median latency by 62×, at identical accuracy.** Nothing is traded away: both runs miss the same single field, and both auto-approve the same 43 documents. p95 is a wash because it is set by the scanned documents, which need the model either way — the rule layer removes the model from the *common* path, not the hard one.
+**Resolving 79.5% of fields deterministically cuts cost per document by 67% and median latency by 62×, at identical accuracy.** Nothing is traded away: both runs miss the same single field, and both auto-approve the same 43 documents. p95 shows no advantage in either direction — it is set by the scanned documents, which call the model in both arms. The rule layer removes the model from the *common* path, not the hard one.
 
 > Accuracy, precision, intervention rate, rule coverage and cost are stable — the corpus is generated under `random.seed(42)`, so a re-run reproduces them to the cent. **Latency on the LLM path is not stable**: it is dominated by OpenAI response time and moves between runs. An earlier run of the identical corpus measured p50 65 ms / 3 768 ms and p95 5 440 ms / 5 526 ms. Read the p50 ratio as "~60× on the rule-served path", not as a precise constant; the cost and accuracy numbers are the load-bearing ones.
 
@@ -187,7 +191,7 @@ docker rm -f baseline
 
 ### Deterministic-only mode
 
-With `LLM_ENABLED=0` (no API key, no spend) the rule layer alone reaches 100% auto-approve precision on 34 documents at 30 ms p50, correctly routing all 10 scans and every missing-field document to human review — a usable extractor with zero LLM dependency, and the baseline the LLM layer is measured against.
+With `LLM_ENABLED=0` (no API key, no spend) the rule layer alone reaches **100% auto-approve precision on 34 documents** at 39 ms p50 / 186 ms p95 and $0.00000 per document. The other 16 are held back rather than guessed at: the 10 scans are **rejected** — with no text layer there is nothing to classify, so document-type confidence is 0 and falls under the 0.6 floor — and the 6 text-layer documents with a deleted field go to **human review**. Field-level accuracy drops to 80.2%, which is the honest cost of removing the model: everything it would have read from an image is simply not extracted. A usable extractor with zero LLM dependency, and the baseline the LLM layer is measured against.
 
 ## Dashboard
 
