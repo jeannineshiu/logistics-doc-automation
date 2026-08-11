@@ -161,11 +161,13 @@ The control group runs the identical pipeline with the rule layer switched off (
 | Auto-approve precision | **100%** (43/43) | 100% (43/43) |
 | Human intervention rate | 14% | 14% |
 | Rule-layer coverage | **79.5%** of fields at zero token cost | 0% |
-| Cost per document | **$0.00195** | $0.00589 |
-| Latency p50 | **65 ms** | 3 768 ms |
-| Latency p95 | 5 440 ms | 5 526 ms |
+| Cost per document | **$0.00196** | $0.00589 |
+| Latency p50 | **66 ms** | 4 098 ms |
+| Latency p95 | 6 962 ms | 5 475 ms |
 
-**Resolving 79.5% of fields deterministically cuts cost per document by 67% and median latency by 58×, at identical accuracy.** Nothing is traded away: both runs miss the same single field, and both auto-approve the same 43 documents. p95 is a wash because it is set by the scanned documents, which need the model either way — the rule layer removes the model from the *common* path, not the hard one.
+**Resolving 79.5% of fields deterministically cuts cost per document by 67% and median latency by 62×, at identical accuracy.** Nothing is traded away: both runs miss the same single field, and both auto-approve the same 43 documents. p95 is a wash because it is set by the scanned documents, which need the model either way — the rule layer removes the model from the *common* path, not the hard one.
+
+> Accuracy, precision, intervention rate, rule coverage and cost are stable — the corpus is generated under `random.seed(42)`, so a re-run reproduces them to the cent. **Latency on the LLM path is not stable**: it is dominated by OpenAI response time and moves between runs. An earlier run of the identical corpus measured p50 65 ms / 3 768 ms and p95 5 440 ms / 5 526 ms. Read the p50 ratio as "~60× on the rule-served path", not as a precise constant; the cost and accuracy numbers are the load-bearing ones.
 
 The number that matters most is **auto-approve precision: 100%**. Nothing incorrect was written to the database unattended.
 
