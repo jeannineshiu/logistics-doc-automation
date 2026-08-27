@@ -41,7 +41,8 @@ HS_CODE_CHAPTER_MAX = 97  # valid HS chapters are 01–97
 CONF_VALIDATED = 1.0      # passed a mathematical/checksum validation
 CONF_FORMAT_OK = 0.95     # matched a strict format pattern
 CONF_HEURISTIC = 0.92     # matched a labeled pattern + normalized cleanly
-CONF_WEAK = 0.80          # looser heuristic — always routes to review
+CONF_LABELED = 0.90       # labeled capture, no validator — deliberately sits
+                          # exactly at the default auto-approve line
 
 
 # ---------------------------------------------------------------- doc type
@@ -242,7 +243,7 @@ def extract_supplier_name(text: str) -> FieldResult:
     # Company names have no fixed format — try a labeled line, else leave to LLM.
     raw = _search(r"(?:supplier|seller|from|lieferant)\s*:\s*([^\n]{3,60})", text)
     if raw:
-        return FieldResult(value=raw.strip(), method=ExtractionMethod.RULE, confidence=0.90)
+        return FieldResult(value=raw.strip(), method=ExtractionMethod.RULE, confidence=CONF_LABELED)
     return FieldResult()
 
 
