@@ -210,7 +210,7 @@ Below the fold, a searchable document table and latency percentiles for debuggin
 
 ## Tests
 
-102 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
+103 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
 pinned so a rebuild reproduces the versions these numbers were measured on:
 
 ```bash

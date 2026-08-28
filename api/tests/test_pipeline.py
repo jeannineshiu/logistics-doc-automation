@@ -3,6 +3,7 @@
 import json
 from types import SimpleNamespace
 
+from engine import rules
 from engine.pipeline import process_document
 from models.schemas import Decision, DocType, ExtractionMethod
 
@@ -101,3 +102,20 @@ def test_unknown_document_is_rejected():
     assert res.doc_type == DocType.UNKNOWN
     assert res.decision == Decision.REJECT
     assert res.fields is None
+
+
+def test_complete_text_layer_invoice_auto_approves(invoice_pdf):
+    """Pin the CONF_LABELED boundary as a decision, not as a number.
+
+    supplier_name has no validator to pass, so a labeled capture scores
+    CONF_LABELED — deliberately equal to the default auto-approve threshold.
+    Every other field validates higher, so a fully labeled invoice clears
+    review with no LLM call. If either constant drifts, this names the
+    decision that changed.
+    """
+    res = process_document(invoice_pdf, "inv.pdf", "doc-8", llm_enabled=False)
+    assert res.decision == Decision.AUTO_APPROVE
+    assert res.flagged_fields == []
+    assert res.tokens_used == 0
+    assert res.fields.supplier_name.method == ExtractionMethod.RULE
+    assert res.fields.supplier_name.confidence == rules.CONF_LABELED
