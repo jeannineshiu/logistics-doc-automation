@@ -6,9 +6,26 @@
 
 ## Architecture
 
-![Architecture: documents enter through an n8n webhook, are extracted by a three-layer FastAPI engine, and are routed to auto-approval, human review, or rejection](docs/architecture.svg)
+Two diagrams, because they answer two different questions. The **container view**
+is what runs and what each part owns; the **flow** is what happens to one
+document, in order. The single diagram they replace mixed the two, and drew the
+`Switch on Status` node with an arrow straight into `reject` — which reads as if
+n8n decided the outcome. It does not.
+
+![Container view: a reviewer and a document source outside a single-host docker-compose boundary that holds n8n on port 5678, the FastAPI extraction engine on 8000, and PostgreSQL; n8n calls the API over HTTP, the API reads and writes PostgreSQL over SQL and calls OpenAI GPT-4o Vision only for the fields the rule layer left empty, and a Streamlit ops view on 8501 reads the API](docs/architecture.svg)
 
 **Separation of concerns:** n8n owns orchestration (branching, retries, HITL forms, error workflow); Python owns computation (extraction, validation, scoring) where it is unit-testable. n8n nodes stay thin.
+
+### What happens to one document
+
+![Swimlane flow across four lanes — Reviewer, n8n, FastAPI and PostgreSQL. The webhook receives the file, Call Extract API posts it to /extract, and the three-layer engine runs rules, then GPT-4o Vision for whatever is still missing, then the confidence router, which is where auto_approve, human_review and reject are decided. The API persists the document and audit entry and returns status alongside the fields; back in the n8n lane, Switch on Status fans out to Auto Notify, Review Wait for Human, and Reject Alert. The review branch crosses into the Reviewer lane and back, then validates the corrections and either submits them or records an invalid one to the dead-letter queue. A failure strip along the bottom shows the error workflow](docs/processing_flow.svg)
+
+**The routing decision is made in the engine, not in n8n.** `/extract` returns
+`decision` and `status` next to the extracted fields, and `Switch on Status`
+reads `$json.status` — it fans out, it does not classify. Keeping it that way
+means the rule that separates a safe document from a doubtful one is a scored
+Python function with unit tests around it, in one place, rather than a condition
+duplicated across n8n nodes where nothing can test it.
 
 ### Why deterministic-first?
 
