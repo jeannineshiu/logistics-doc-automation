@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
 
+from engine.confidence import required_fields
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 from models.db import get_session, init_db
+from models.schemas import DocType
 from routers import dead_letter, documents, extract, metrics, review
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -12,6 +14,11 @@ from sqlalchemy.orm import Session
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    # A typo in REQUIRED_FIELDS_* would otherwise surface as a 500 on the first
+    # document, one request at a time. Read it once here so the container fails
+    # to start instead, the same way it refuses to start without its database.
+    for doc_type in (DocType.INVOICE, DocType.CUSTOMS_FORM):
+        required_fields(doc_type)
     yield
 
 
