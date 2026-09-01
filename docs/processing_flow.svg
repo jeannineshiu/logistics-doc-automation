@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="1380" viewBox="0 0 1260 1380" font-family="ui-sans-serif, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#71717A"/>
+    </marker>
+    <marker id="arrowLight" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#A1A1AA"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#DC2626"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#16A34A"/>
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#D97706"/>
+    </marker>
+  </defs>
+  <rect width="1260" height="1380" fill="#FFFFFF"/>
+  <text x="40" y="44" font-size="20" fill="#18181B" text-anchor="start" font-weight="700">Document processing flow — one document, end to end</text>
+  <text x="40" y="68" font-size="12" fill="#52525B" text-anchor="start">Time runs down the page. The routing decision is computed by the confidence router and returned to n8n; the Switch only fans out on the status it received.</text>
+  <rect x="36" y="92" width="192" height="1154" rx="10" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1.2"/>
+  <text x="50" y="112" font-size="11.5" fill="#52525B" text-anchor="start" font-weight="700">Reviewer</text>
+  <path d="M 36 122 H 228" fill="none" stroke="#FDE68A" stroke-width="1.2"/>
+  <rect x="236" y="92" width="470" height="1154" rx="10" fill="#FEF2F4" stroke="#FBCFE8" stroke-width="1.2"/>
+  <text x="250" y="112" font-size="11.5" fill="#52525B" text-anchor="start" font-weight="700">n8n — orchestration</text>
+  <path d="M 236 122 H 706" fill="none" stroke="#FBCFE8" stroke-width="1.2"/>
+  <rect x="714" y="92" width="310" height="1154" rx="10" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="1.2"/>
+  <text x="728" y="112" font-size="11.5" fill="#52525B" text-anchor="start" font-weight="700">FastAPI — computation</text>
+  <path d="M 714 122 H 1024" fill="none" stroke="#A7F3D0" stroke-width="1.2"/>
+  <rect x="1032" y="92" width="192" height="1154" rx="10" fill="#EFF6FF" stroke="#BFDBFE" stroke-width="1.2"/>
+  <text x="1046" y="112" font-size="11.5" fill="#52525B" text-anchor="start" font-weight="700">PostgreSQL</text>
+  <path d="M 1032 122 H 1224" fill="none" stroke="#BFDBFE" stroke-width="1.2"/>
+  <rect x="346" y="140" width="250" height="54" rx="7" fill="#FFFFFF" stroke="#D4D4D8" stroke-width="1.3"/>
+  <text x="471.0" y="162" font-size="12" fill="#18181B" text-anchor="middle" font-weight="700">Webhook: Document Upload</text>
+  <text x="471.0" y="179" font-size="9.8" fill="#52525B" text-anchor="middle">POST /webhook/doc-upload · multipart file</text>
+  <path d="M 471 194 V 214" fill="none" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="346" y="216" width="250" height="56" rx="7" fill="#FFFFFF" stroke="#D4D4D8" stroke-width="1.3"/>
+  <text x="471.0" y="238" font-size="12" fill="#18181B" text-anchor="middle" font-weight="700">Call Extract API</text>
+  <text x="471.0" y="255" font-size="9.8" fill="#52525B" text-anchor="middle">HTTP node · retry 3× / 3 s backoff</text>
+  <text x="471.0" y="269" font-size="9.8" fill="#52525B" text-anchor="middle">120 s node timeout</text>
+  <rect x="726" y="240" width="286" height="260" rx="10" fill="#FFFFFF" stroke="#059669" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <text x="742" y="262" font-size="11" fill="#047857" text-anchor="start" font-weight="700">POST /extract — three-layer engine</text>
+  <text x="742" y="277" font-size="9" fill="#065F46" text-anchor="start">idempotent by SHA-256: a repeat replays the stored result</text>
+  <rect x="742" y="288" width="254" height="54" rx="7" fill="#F0FDF4" stroke="#A7F3D0" stroke-width="1.3"/>
+  <text x="869.0" y="310" font-size="11.5" fill="#18181B" text-anchor="middle" font-weight="700">1 · Rule layer</text>
+  <text x="869.0" y="327" font-size="9.8" fill="#52525B" text-anchor="middle">regex + IBAN/VAT checksum on the text layer</text>
+  <text x="869.0" y="341" font-size="9.8" fill="#52525B" text-anchor="middle">79.5% of fields · 0 tokens · confidence 1.0</text>
+  <path d="M 869 342 V 358" fill="none" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="874" y="343.5" width="103.7125" height="17.5" rx="3" fill="#FFFFFF"/>
+  <text x="879" y="354.0" font-size="8.5" fill="#52525B" text-anchor="start">fields still missing?</text>
+  <rect x="742" y="360" width="254" height="54" rx="7" fill="#F0FDF4" stroke="#A7F3D0" stroke-width="1.3"/>
+  <text x="869.0" y="382" font-size="11.5" fill="#18181B" text-anchor="middle" font-weight="700">2 · GPT-4o Vision</text>
+  <text x="869.0" y="399" font-size="9.8" fill="#52525B" text-anchor="middle">asked only for the fields layer 1 missed</text>
+  <text x="869.0" y="413" font-size="9.8" fill="#52525B" text-anchor="middle">hard caps: 8 000 tokens / 2 calls per doc</text>
+  <path d="M 869 414 V 428" fill="none" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="742" y="430" width="254" height="52" rx="7" fill="#FEFCE8" stroke="#D97706" stroke-width="1.4"/>
+  <text x="869" y="450" font-size="11.5" fill="#B45309" text-anchor="middle" font-weight="700">3 · Confidence router</text>
+  <text x="869" y="468" font-size="9.4" fill="#92400E" text-anchor="middle">decides auto_approve / human_review / reject</text>
+  <path d="M 596 244 H 664 V 316 H 720" fill="none" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="599" y="224.5" width="74.8375" height="18.5" rx="3" fill="#FFFFFF"/>
+  <text x="604" y="236.0" font-size="9.5" fill="#52525B" text-anchor="start">POST /extract</text>
+  <rect x="726" y="528" width="286" height="62" rx="7" fill="#FFFFFF" stroke="#A7F3D0" stroke-width="1.3"/>
+  <text x="869.0" y="550" font-size="11.5" fill="#18181B" text-anchor="middle" font-weight="700">Persist + audit</text>
+  <text x="869.0" y="567" font-size="9.8" fill="#52525B" text-anchor="middle">documents row · every field keeps its method</text>
+  <text x="869.0" y="581" font-size="9.8" fill="#52525B" text-anchor="middle">audit_log · extracted:&lt;decision&gt; · actor = system</text>
+  <path d="M 869 500 V 526" fill="none" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M 1012 554 H 1056" fill="none" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="1062" y="524" width="152" height="92" rx="7" fill="#FFFFFF" stroke="#BFDBFE" stroke-width="1.3"/>
+  <text x="1138" y="548" font-size="11.5" fill="#1D4ED8" text-anchor="middle" font-weight="700">PostgreSQL</text>
+  <text x="1138" y="568" font-size="9.8" fill="#52525B" text-anchor="middle">documents</text>
+  <text x="1138" y="583" font-size="9.8" fill="#52525B" text-anchor="middle">audit_log</text>
+  <text x="1138" y="598" font-size="9.8" fill="#52525B" text-anchor="middle">dead_letter</text>
+  <path d="M 726 568 H 660 V 628 H 632" fill="none" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="458.63" y="514.8" width="198.36999999999998" height="30.4" rx="3" fill="#FEF2F4"/>
+  <text x="652" y="526.0" font-size="9.2" fill="#52525B" text-anchor="end">200 OK — { status, decision, fields,</text>
+  <text x="652" y="538.2" font-size="9.2" fill="#52525B" text-anchor="end">flagged_fields, tokens_used, cost_usd }</text>
+  <text x="652" y="566" font-size="8.8" fill="#71717A" text-anchor="end" font-style="italic">n8n branches on status, not decision:</text>
+  <text x="652" y="579" font-size="8.8" fill="#71717A" text-anchor="end" font-style="italic">decision is frozen at extraction time, status moves</text>
+  <text x="652" y="592" font-size="8.8" fill="#71717A" text-anchor="end" font-style="italic">when a reviewer acts — so a replay is not re-queued</text>
+  <rect x="316" y="600" width="310" height="56" rx="7" fill="#FFFFFF" stroke="#EA4B71" stroke-width="1.5"/>
+  <text x="471" y="622" font-size="12" fill="#18181B" text-anchor="middle" font-weight="700">Switch on Status</text>
+  <text x="471" y="640" font-size="9.4" fill="#71717A" text-anchor="middle">reads $json.status — no logic, nothing re-derived</text>
+  <path d="M 471 656 V 692 H 311 V 724" fill="none" stroke="#16A34A" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+  <path d="M 471 656 V 724" fill="none" stroke="#D97706" stroke-width="1.5" marker-end="url(#arrowAmber)"/>
+  <path d="M 471 656 V 692 H 631 V 724" fill="none" stroke="#DC2626" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+  <rect x="287.1" y="699" width="47.800000000000004" height="18" rx="3" fill="#FEF2F4"/>
+  <text x="311" y="710" font-size="9" fill="#15803D" text-anchor="middle">approved</text>
+  <rect x="432.925" y="699" width="76.15" height="18" rx="3" fill="#FEF2F4"/>
+  <text x="471" y="710" font-size="9" fill="#B45309" text-anchor="middle">pending_review</text>
+  <rect x="607.1" y="699" width="47.800000000000004" height="18" rx="3" fill="#FEF2F4"/>
+  <text x="631" y="710" font-size="9" fill="#B91C1C" text-anchor="middle">rejected</text>
+  <rect x="238" y="726" width="146" height="74" rx="7" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.3"/>
+  <text x="311.0" y="748" font-size="10.5" fill="#15803D" text-anchor="middle" font-weight="700">Auto: Notify</text>
+  <text x="311.0" y="765" font-size="9.8" fill="#52525B" text-anchor="middle">output 0</text>
+  <text x="311.0" y="778" font-size="9.8" fill="#52525B" text-anchor="middle">stored unattended,</text>
+  <text x="311.0" y="791" font-size="9.8" fill="#52525B" text-anchor="middle">no human touches it</text>
+  <rect x="398" y="726" width="146" height="74" rx="7" fill="#FEF3C7" stroke="#D97706" stroke-width="1.3"/>
+  <text x="471.0" y="748" font-size="10" fill="#B45309" text-anchor="middle" font-weight="700">Review: Wait for Human</text>
+  <text x="471.0" y="765" font-size="9.8" fill="#52525B" text-anchor="middle">output 1 · Form node</text>
+  <text x="471.0" y="778" font-size="9.8" fill="#52525B" text-anchor="middle">the execution pauses</text>
+  <text x="471.0" y="791" font-size="9.8" fill="#52525B" text-anchor="middle">here until it resumes</text>
+  <rect x="558" y="726" width="146" height="74" rx="7" fill="#FEE2E2" stroke="#DC2626" stroke-width="1.3"/>
+  <text x="631.0" y="748" font-size="10.5" fill="#B91C1C" text-anchor="middle" font-weight="700">Reject: Alert</text>
+  <text x="631.0" y="765" font-size="9.8" fill="#52525B" text-anchor="middle">output 2</text>
+  <text x="631.0" y="778" font-size="9.8" fill="#52525B" text-anchor="middle">doc-type confidence</text>
+  <text x="631.0" y="791" font-size="9.8" fill="#52525B" text-anchor="middle">under the 0.6 floor</text>
+  <rect x="46" y="790" width="172" height="90" rx="8" fill="#FFFFFF" stroke="#FDE68A" stroke-width="1.4"/>
+  <text x="132" y="814" font-size="12" fill="#18181B" text-anchor="middle" font-weight="700">Reviewer</text>
+  <text x="132" y="834" font-size="9.6" fill="#52525B" text-anchor="middle">opens the signed form URL,</text>
+  <text x="132" y="849" font-size="9.6" fill="#52525B" text-anchor="middle">types corrections_json</text>
+  <text x="132" y="864" font-size="9.6" fill="#52525B" text-anchor="middle">and their name, submits</text>
+  <path d="M 471 800 V 826 H 224" fill="none" stroke="#D97706" stroke-width="1.5" marker-end="url(#arrowAmber)"/>
+  <rect x="336.52" y="809.2" width="46.96000000000001" height="17.8" rx="3" fill="#FEF2F4"/>
+  <text x="360" y="820.0" font-size="8.8" fill="#B45309" text-anchor="middle">form URL</text>
+  <path d="M 218 862 H 471 V 886" fill="none" stroke="#D97706" stroke-width="1.5" marker-end="url(#arrowAmber)"/>
+  <rect x="294.94" y="845.2" width="130.12" height="17.8" rx="3" fill="#FEF2F4"/>
+  <text x="360" y="856.0" font-size="8.8" fill="#B45309" text-anchor="middle">submit → execution resumes</text>
+  <rect x="346" y="888" width="250" height="54" rx="7" fill="#FFFFFF" stroke="#D4D4D8" stroke-width="1.3"/>
+  <text x="471.0" y="910" font-size="12" fill="#18181B" text-anchor="middle" font-weight="700">Review: Validate Corrections</text>
+  <text x="471.0" y="927" font-size="9.8" fill="#52525B" text-anchor="middle">Code node · JSON.parse in a try/catch,</text>
+  <text x="471.0" y="941" font-size="9.8" fill="#52525B" text-anchor="middle">deliberately never throws</text>
+  <path d="M 471 942 V 960" fill="none" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M 471 962 L 611 1002 L 471 1042 L 331 1002 Z" fill="#FFFFFF" stroke="#EA4B71" stroke-width="1.5"/>
+  <text x="471" y="998" font-size="11" fill="#18181B" text-anchor="middle" font-weight="700">Review: Corrections</text>
+  <text x="471" y="1014" font-size="11" fill="#18181B" text-anchor="middle" font-weight="700">Valid?</text>
+  <path d="M 331 1002 H 300 V 1072 H 314" fill="none" stroke="#16A34A" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+  <path d="M 611 1002 H 642 V 1072 H 628" fill="none" stroke="#DC2626" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+  <rect x="285.55" y="1033" width="28.900000000000002" height="18" rx="3" fill="#FEF2F4"/>
+  <text x="300" y="1044" font-size="9" fill="#15803D" text-anchor="middle">true</text>
+  <rect x="625.1875" y="1033" width="33.625" height="18" rx="3" fill="#FEF2F4"/>
+  <text x="642" y="1044" font-size="9" fill="#B91C1C" text-anchor="middle">false</text>
+  <rect x="318" y="1074" width="148" height="62" rx="7" fill="#DCFCE7" stroke="#16A34A" stroke-width="1.3"/>
+  <text x="392.0" y="1096" font-size="10.5" fill="#15803D" text-anchor="middle" font-weight="700">Review: Submit</text>
+  <text x="392.0" y="1113" font-size="9.8" fill="#52525B" text-anchor="middle">Corrections</text>
+  <text x="392.0" y="1126" font-size="9.8" fill="#52525B" text-anchor="middle">POST /review/{id}</text>
+  <rect x="478" y="1074" width="148" height="62" rx="7" fill="#FEE2E2" stroke="#DC2626" stroke-width="1.3"/>
+  <text x="552.0" y="1096" font-size="10.5" fill="#B91C1C" text-anchor="middle" font-weight="700">Review: Record</text>
+  <text x="552.0" y="1113" font-size="9.8" fill="#52525B" text-anchor="middle">Invalid Correction</text>
+  <text x="552.0" y="1126" font-size="9.8" fill="#52525B" text-anchor="middle">POST /dead-letter</text>
+  <path d="M 392 1136 V 1174" fill="none" stroke="#16A34A" stroke-width="1.5"/>
+  <path d="M 552 1136 V 1174" fill="none" stroke="#DC2626" stroke-width="1.5"/>
+  <path d="M 392 1174 H 720" fill="none" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="726" y="1122" width="286" height="104" rx="7" fill="#FFFFFF" stroke="#A7F3D0" stroke-width="1.3"/>
+  <text x="742" y="1144" font-size="11.5" fill="#18181B" text-anchor="start" font-weight="700">Write-back</text>
+  <text x="742" y="1164" font-size="9.6" fill="#52525B" text-anchor="start">/review/{id} — corrections stored as method=human,</text>
+  <text x="742" y="1178" font-size="9.6" fill="#52525B" text-anchor="start">audit_log review_submitted · status → approved</text>
+  <text x="742" y="1200" font-size="9.6" fill="#52525B" text-anchor="start">/dead-letter — opens a row holding the raw text;</text>
+  <text x="742" y="1214" font-size="9.6" fill="#52525B" text-anchor="start">the document stays pending_review, redoable</text>
+  <path d="M 1012 1174 H 1056" fill="none" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="1062" y="1150" width="152" height="48" rx="7" fill="#FFFFFF" stroke="#BFDBFE" stroke-width="1.3"/>
+  <text x="1138" y="1171" font-size="11" fill="#1D4ED8" text-anchor="middle" font-weight="700">PostgreSQL</text>
+  <text x="1138" y="1187" font-size="9" fill="#52525B" text-anchor="middle">documents · dead_letter</text>
+  <rect x="36" y="1272" width="1188" height="82" rx="10" fill="#FAFAFA" stroke="#D4D4D8" stroke-width="1.3" stroke-dasharray="6 5"/>
+  <text x="56" y="1296" font-size="11.5" fill="#18181B" text-anchor="start" font-weight="700">Failure path</text>
+  <text x="56" y="1314" font-size="9.6" fill="#52525B" text-anchor="start">workflow setting errorWorkflow = LogisticsErrorWf</text>
+  <text x="56" y="1329" font-size="9.6" fill="#52525B" text-anchor="start">fires on any failed execution, not just the extract call</text>
+  <rect x="404" y="1288" width="172" height="50" rx="6" fill="#FFFFFF" stroke="#D4D4D8" stroke-width="1.2"/>
+  <text x="490" y="1308" font-size="10.5" fill="#18181B" text-anchor="middle" font-weight="700">Error Trigger</text>
+  <text x="490" y="1324" font-size="9" fill="#71717A" text-anchor="middle">failed execution</text>
+  <rect x="616" y="1288" width="172" height="50" rx="6" fill="#FFFFFF" stroke="#D4D4D8" stroke-width="1.2"/>
+  <text x="702" y="1308" font-size="10.5" fill="#18181B" text-anchor="middle" font-weight="700">Record to Dead Letter</text>
+  <text x="702" y="1324" font-size="9" fill="#71717A" text-anchor="middle">POST /dead-letter</text>
+  <rect x="828" y="1288" width="172" height="50" rx="6" fill="#FFFFFF" stroke="#D4D4D8" stroke-width="1.2"/>
+  <text x="914" y="1308" font-size="10.5" fill="#18181B" text-anchor="middle" font-weight="700">Alert Ops</text>
+  <text x="914" y="1324" font-size="9" fill="#71717A" text-anchor="middle">Slack/Email stub</text>
+  <path d="M 576 1313 H 610" fill="none" stroke="#A1A1AA" stroke-width="1.5" marker-end="url(#arrowLight)"/>
+  <path d="M 788 1313 H 822" fill="none" stroke="#A1A1AA" stroke-width="1.5" marker-end="url(#arrowLight)"/>
+  <text x="1016" y="1302" font-size="9.2" fill="#71717A" text-anchor="start">Known gap: if the API is what failed, the dead-letter</text>
+  <text x="1016" y="1316" font-size="9.2" fill="#71717A" text-anchor="start">write fails too — n8n's own execution history is the</text>
+  <text x="1016" y="1330" font-size="9.2" fill="#71717A" text-anchor="start">durable record in that window.</text>
+</svg>
