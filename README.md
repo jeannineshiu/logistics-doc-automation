@@ -29,7 +29,7 @@ duplicated across n8n nodes where nothing can test it.
 
 ### Why deterministic-first?
 
-Fields with a fixed format (IBAN, VAT ID, dates, HS codes, amounts) are extracted from the PDF text layer with regexes and *validated* — an IBAN that passes its checksum is mathematically correct and gets confidence 1.0 without spending a single token. The LLM is only called for the fields the rule layer missed, and only asked for those fields. Result on the synthetic corpus: **every field actually present in a text layer is resolved by rules at zero cost** — 34 of the 40 text-layer documents never call the model at all. The six that do are the ones with a field deliberately deleted: rules find nothing to extract for a value that is not there, so it escalates. The LLM budget goes to those and to the hard cases (noisy scans, handwriting).
+Fields with a fixed format (IBAN, VAT ID, dates, HS codes, amounts) are extracted from the PDF text layer with regexes and *validated* — an IBAN that passes its checksum is mathematically correct and gets confidence 1.0 without spending a single token. The LLM is only called for the fields the rule layer missed, and only asked for those fields. Result on the synthetic corpus: **every field actually present in a text layer is resolved by rules at zero cost** — 34 of the 40 text-layer documents never call the model at all. The six that do are the ones with a field deliberately deleted: rules find nothing to extract for a value that is not there, so it escalates. The LLM budget goes to those and to the hard cases (noisy scans, handwriting). That 79.5% is a property of this corpus as much as of the strategy: the same rules hold 21.7% of the fields on real invoices, measured under [Real documents](#real-documents-not-generated-ones).
 
 ### Cost governance in code, not prompts
 
@@ -40,9 +40,9 @@ Fields with a fixed format (IBAN, VAT ID, dates, HS codes, amounts) are extracte
 
 | Decision | Condition | Resulting status |
 |---|---|---|
-| `auto_approve` | every *required* field present with confidence ≥ 0.90 | `approved` |
-| `human_review` | a required field missing, any field below 0.90, or budget exceeded | `pending_review` |
-| `reject` | nothing could be read at all (document-type confidence < 0.6) | `rejected` |
+| `auto_approve` | every *required* field present, and every field read at confidence ≥ 0.90 | `approved` |
+| `human_review` | a required field missing, nothing read at all, any field below 0.90, or budget exceeded | `pending_review` |
+| `reject` | no document type could be established (confidence < 0.6) | `rejected` |
 
 **Which fields are required is configuration, not schema.** Unset, it is every
 field the document type defines — right for the EU invoices this was built
@@ -205,7 +205,7 @@ The control group runs the identical pipeline with the rule layer switched off (
 
 > Accuracy, precision, intervention rate, rule coverage and cost are stable — the corpus is generated under `random.seed(42)`, so a re-run reproduces them to the cent. **Latency on the LLM path is not stable**: it is dominated by OpenAI response time and moves between runs. An earlier run of the identical corpus measured p50 65 ms / 3 768 ms and p95 5 440 ms / 5 526 ms. Read the p50 ratio as "~60× on the rule-served path", not as a precise constant; the cost and accuracy numbers are the load-bearing ones.
 
-The number that matters most is **auto-approve precision: 100%**. Nothing incorrect was written to the database unattended.
+The number that matters most is **auto-approve precision: 100%** — nothing incorrect was written to the database unattended. It is also the number that does not survive contact with documents this repo did not generate: on real invoices, with a required-field set that fits them, it is 6 of 14. See [Real documents](#real-documents-not-generated-ones).
 
 ### The one field both runs got wrong — and why it never reached the database
 
