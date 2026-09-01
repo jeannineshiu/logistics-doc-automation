@@ -20,6 +20,14 @@ from engine.pdf_utils import load_document
 # blended $/token used for reporting (input-heavy vision workload)
 BLENDED_PRICE_PER_TOKEN = 3.5 / 1_000_000
 
+# Confidence in a document type the image-only path inferred rather than read.
+# INFERRED is what half a schema coming back earns; PARTIAL is what a thinner
+# read earns — deliberately above conf_mod.DOC_TYPE_FLOOR, so the document
+# reaches a human with the fields that *were* read attached, instead of being
+# rejected and taking them with it.
+INFERRED_DOC_TYPE_CONFIDENCE = 0.7
+PARTIAL_DOC_TYPE_CONFIDENCE = 0.65
+
 
 def process_document(
     data: bytes,
@@ -66,8 +74,8 @@ def process_document(
             page_pngs, budget, llm_client
         )
 
-    decision, flagged = conf_mod.route(fields, doc_type_conf, budget_exceeded)
-    overall = conf_mod.overall_confidence(fields)
+    decision, flagged = conf_mod.route(fields, doc_type_conf, budget_exceeded, doc_type)
+    overall = conf_mod.overall_confidence(fields, doc_type)
     latency_ms = int((time.monotonic() - start) * 1000)
 
     fields_model = None
@@ -92,15 +100,29 @@ def _llm_full_extraction(
     budget: TokenBudget,
     llm_client: OpenAI | None,
 ) -> tuple[DocType, float, dict[str, FieldResult], bool]:
-    """Fallback for image-only documents: try invoice schema first, then customs."""
+    """Fallback for image-only documents: try invoice schema first, then customs.
+
+    Half a schema coming back is taken as the document type. Below that, the
+    best attempt is still returned rather than discarded: a receipt gives an
+    invoice schema two fields of seven, which used to be rejected as an unknown
+    type — throwing away a total the model had read correctly. Refusing to
+    auto-approve it is right; losing it is not. Only a document that produced
+    nothing at all is unknown.
+    """
+    best: tuple[DocType, dict[str, FieldResult], int] = (DocType.UNKNOWN, {}, 0)
     for doc_type in (DocType.INVOICE, DocType.CUSTOMS_FORM):
         try:
             results = extract_missing_fields(
                 page_pngs, doc_type, FIELD_NAMES[doc_type], budget, client=llm_client
             )
         except BudgetExceeded:
-            return doc_type, 0.7, {}, True
+            return doc_type, INFERRED_DOC_TYPE_CONFIDENCE, {}, True
         found = sum(1 for f in results.values() if f.value is not None)
         if found >= len(FIELD_NAMES[doc_type]) // 2:
-            return doc_type, 0.7, results, False
+            return doc_type, INFERRED_DOC_TYPE_CONFIDENCE, results, False
+        if found > best[2]:
+            best = (doc_type, results, found)
+
+    if best[2]:
+        return best[0], PARTIAL_DOC_TYPE_CONFIDENCE, best[1], False
     return DocType.UNKNOWN, 0.0, {}, False

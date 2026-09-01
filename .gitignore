@@ -8,3 +8,9 @@ data/samples/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
+
+# real corpora are downloaded, not vendored — see data/prepare_real.py
+data/real/
+
+# DocILE: 1.1 GB of licensed documents, downloaded per token — see data/adapters/docile.py
+data/docile/

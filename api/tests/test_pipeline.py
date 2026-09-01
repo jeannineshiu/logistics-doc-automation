@@ -1,11 +1,13 @@
 """Pipeline-level tests: layer interaction and the pure-LLM control group."""
 
+import io
 import json
 from types import SimpleNamespace
 
 from engine import rules
 from engine.pipeline import process_document
 from models.schemas import Decision, DocType, ExtractionMethod
+from PIL import Image
 
 from tests.conftest import make_pdf
 
@@ -119,3 +121,89 @@ def test_complete_text_layer_invoice_auto_approves(invoice_pdf):
     assert res.tokens_used == 0
     assert res.fields.supplier_name.method == ExtractionMethod.RULE
     assert res.fields.supplier_name.confidence == rules.CONF_LABELED
+
+
+US_INVOICE_LINES = [
+    "INVOICE",
+    "Invoice No: 22334",
+    "Invoice date: 03/25/2025",
+    "Supplier: Cumulus Broadcasting LLC",
+    "Total amount: USD 1,082.50",
+]
+
+
+class SparseClient(FakeClient):
+    """Answers only for the named fields — a document that does not fit the schema."""
+
+    def __init__(self, answer_fields, **kwargs):
+        self._answer = set(answer_fields)
+        super().__init__(**kwargs)
+
+    def _create(self, **kwargs):
+        self.calls += 1
+        prompt = kwargs["messages"][0]["content"][0]["text"]
+        fields = [ln.split('"')[1] for ln in prompt.splitlines() if ln.startswith('- "')]
+        self.requested_fields.append(fields)
+        payload = {
+            "fields": {
+                name: (
+                    {"value": self._value, "confidence": self._conf}
+                    if name in self._answer
+                    else {"value": None, "confidence": 0}
+                )
+                for name in fields
+            }
+        }
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+            usage=SimpleNamespace(total_tokens=self._tokens),
+        )
+
+
+def _blank_jpeg() -> bytes:
+    """An image upload: no text layer, so the whole document goes to the model."""
+    buf = io.BytesIO()
+    Image.new("RGB", (200, 300), "white").save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def test_a_partly_read_image_keeps_its_fields_instead_of_being_rejected():
+    """Two of seven fields does not identify a document type, but it is not
+    nothing: the total the model read is worth a review queue, not a bin."""
+    client = SparseClient({"invoice_number", "total_amount"})
+    res = process_document(_blank_jpeg(), "receipt.jpg", "doc-9", llm_client=client)
+    assert res.doc_type == DocType.INVOICE
+    assert res.decision == Decision.HUMAN_REVIEW
+    assert res.fields.total_amount.value == "LLM-VALUE"
+    assert "<doc_type_uncertain>" in res.flagged_fields
+
+
+def test_an_image_nothing_was_read_from_is_still_rejected():
+    client = SparseClient(set())
+    res = process_document(_blank_jpeg(), "blank.jpg", "doc-10", llm_client=client)
+    assert res.doc_type == DocType.UNKNOWN
+    assert res.decision == Decision.REJECT
+    assert res.fields is None
+
+
+def test_us_invoice_is_unapprovable_until_the_required_set_says_so(monkeypatch):
+    """The same document, the same extraction, two configurations.
+
+    Measured on DocILE: an IBAN is absent from every US invoice, so with the
+    default required set no US document can ever clear review.
+    """
+    res = process_document(make_pdf(US_INVOICE_LINES), "us.pdf", "doc-11", llm_enabled=False)
+    assert res.decision == Decision.HUMAN_REVIEW
+    # A US layout matches one classifier keyword and lands at 0.6 — one hair
+    # above the reject floor — so the type is flagged as a guess alongside the
+    # two fields the document does not carry.
+    assert set(res.flagged_fields) == {"<doc_type_uncertain>", "iban", "supplier_vat_id"}
+
+    monkeypatch.setenv(
+        "REQUIRED_FIELDS_INVOICE",
+        "invoice_number,invoice_date,supplier_name,currency,total_amount",
+    )
+    res = process_document(make_pdf(US_INVOICE_LINES), "us.pdf", "doc-12", llm_enabled=False)
+    assert res.decision == Decision.AUTO_APPROVE
+    assert res.flagged_fields == []
+    assert res.fields.iban.value is None, "still absent, just no longer disqualifying"

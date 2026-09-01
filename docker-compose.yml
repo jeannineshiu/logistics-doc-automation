@@ -29,6 +29,9 @@ services:
       MAX_LLM_CALLS_PER_DOC: ${MAX_LLM_CALLS_PER_DOC:-2}
       AUTO_APPROVE_THRESHOLD: ${AUTO_APPROVE_THRESHOLD:-0.90}
       REVIEW_FLOOR_THRESHOLD: ${REVIEW_FLOOR_THRESHOLD:-0.50}
+      # Unset means every field in the schema must be present — see .env.example
+      REQUIRED_FIELDS_INVOICE: ${REQUIRED_FIELDS_INVOICE:-}
+      REQUIRED_FIELDS_CUSTOMS_FORM: ${REQUIRED_FIELDS_CUSTOMS_FORM:-}
     depends_on:
       postgres:
         condition: service_healthy

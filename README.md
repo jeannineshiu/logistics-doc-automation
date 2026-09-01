@@ -40,9 +40,29 @@ Fields with a fixed format (IBAN, VAT ID, dates, HS codes, amounts) are extracte
 
 | Decision | Condition | Resulting status |
 |---|---|---|
-| `auto_approve` | every field present with confidence ≥ 0.90 | `approved` |
-| `human_review` | any field missing, below 0.90, or budget exceeded | `pending_review` |
-| `reject` | document type unrecognizable (confidence < 0.6) | `rejected` |
+| `auto_approve` | every *required* field present with confidence ≥ 0.90 | `approved` |
+| `human_review` | a required field missing, any field below 0.90, or budget exceeded | `pending_review` |
+| `reject` | nothing could be read at all (document-type confidence < 0.6) | `rejected` |
+
+**Which fields are required is configuration, not schema.** Unset, it is every
+field the document type defines — right for the EU invoices this was built
+against, where an IBAN and a VAT ID are on the page. On 25 real US invoices
+from DocILE, `iban` was absent from 25 of 25 and `supplier_vat_id` from 24 of
+25, so every single document routed to a human for fields it was never going to
+carry. `REQUIRED_FIELDS_INVOICE` and `REQUIRED_FIELDS_CUSTOMS_FORM` name the
+fields a deployment's documents actually have; an absent optional field then
+neither blocks approval nor appears on the reviewer's form, and a name that is
+not in the schema stops the API at startup rather than silently dropping a
+field out of the required set. What that setting does to the numbers is
+measured under [Real documents](#real-documents-not-generated-ones).
+
+**Reject means nothing was read, not "did not fit".** A document the image-only
+path cannot type is still returned with whatever fields it did produce, at a
+document-type confidence deliberately above the 0.6 floor, so it reaches a
+reviewer carrying them. It used to be rejected: a receipt yields two of seven
+invoice fields, below the half-schema bar for accepting a type, and a correctly
+read total went in the bin with it. `<doc_type_uncertain>` is flagged so the
+reviewer knows the schema itself is a guess.
 
 `decision` is what the engine concluded at extraction time and never changes —
 it is the audit record. `status` is the document's current disposition and moves
@@ -206,6 +226,106 @@ docker rm -f baseline
 
 > Evaluate against a fresh database. `/extract` is idempotent by file hash, so a database that already holds these documents replays stored results instead of re-extracting — and any human corrections submitted through the review flow would be scored as extraction output.
 
+### Real documents, not generated ones
+
+Every number above is measured on a corpus this repo generated from the same
+templates the rule layer's regexes were written against. That measures the
+wiring; it cannot measure extraction, because the extractor was written to fit
+the generator. `data/prepare_real.py` prepares corpora nobody here laid out:
+
+```bash
+python data/prepare_real.py docile --limit 25   # DocILE — real invoices, per-token research access
+python data/prepare_real.py sroie  --limit 25   # ICDAR 2019 SROIE — real scanned till receipts
+python data/prepare_real.py cord   --limit 15   # CORD v2 — Indonesian receipts, CC BY 4.0
+python eval/evaluate.py --manifest data/real/docile/manifest.json
+```
+
+Nothing downloaded is committed — `data/real/` and `data/docile/` are
+gitignored and every dataset carries its own terms.
+
+A real corpus labels only part of this schema: SROIE knows a merchant, a date
+and a total, and nothing about a VAT ID or an IBAN. Each prepared corpus
+therefore ships a `manifest.json` naming which fields are scored and how each
+one is compared — a fuzzy `name` match at a stated 0.85 similarity threshold,
+dates parsed to ISO before comparison, amounts compared numerically. Scoring
+the unlabelled fields as misses would report a number about the dataset rather
+than about the extractor.
+
+| | synthetic (50) | DocILE (25) | SROIE (25) | CORD v2 (15) |
+|---|---|---|---|---|
+| Scored fields | 334 | 109 | 75 | 15 |
+| Field-level accuracy | 99.7% | **84.4%** | **97.3%** | **73.3%** |
+| Auto-approved | 43 (86%) | **0** | **0** | **0** |
+| Human review | 7 | 25 | 25 | 15 |
+| Rejected | 0 | 0 | 0 | 0 |
+| Rule-layer coverage | 79.5% | **21.7%** | 0% | 0% |
+| Cost per document | $0.00196 | $0.00456 | $0.00498 | $0.00883 |
+| Latency p50 | 66 ms | 3 749 ms | 4 416 ms | 6 651 ms |
+
+DocILE is the closest of the three to what this pipeline claims to process:
+real invoices, annotated by people with no stake in this extractor, and 16 of
+the 25 carry a text layer, so the rule layer actually runs. All 25 were
+classified as invoices correctly.
+
+**Rule-layer coverage falls from 79.5% to 21.7%.** The regexes were written
+against this repo's own templates, and on real invoices they hold for 7 of 25
+totals, 11 of 25 currencies, 5 of 25 document numbers — and 1 of 25 dates. Two
+separate causes: the extractors want a label they recognise (`Invoice date:`,
+`Rechnungsdatum`), and `parse_date` rejects anything before 2000, which is most
+of a corpus drawn from the UCSF Industry Documents Library. Deterministic-first
+still pays for itself — a fifth of the fields at zero tokens, and cost per
+document stays under half a cent — but the 79.5% was a property of the
+generator, not of the strategy.
+
+**Nothing auto-approved on any real corpus, until the required-field set
+matched the documents.** `iban` was missing from all 25 DocILE invoices and
+`supplier_vat_id` from 24, so with the default required set — every field in
+the schema — a US invoice cannot clear review no matter how well it is read.
+Naming what a US invoice actually carries changes that:
+
+```bash
+REQUIRED_FIELDS_INVOICE=invoice_number,invoice_date,supplier_name,total_amount
+```
+
+| DocILE, 25 invoices | default required set | US required set |
+|---|---|---|
+| Auto-approved | 0 | 14 |
+| Human intervention rate | 100% | 44% |
+| Auto-approve precision | — (nothing approved) | **6/14 = 42.9%** |
+
+**And that is the number this whole exercise exists to produce.** Cutting the
+human queue by more than half also wrote wrong data into the database unattended
+five times: two document numbers (`9832146G` read as `82314469`), a date read as
+2000 instead of 2009, and two supplier names where the model named a real
+company printed on the page that was not the vendor. Three more auto-approvals
+differ only by a `currency` this deployment declared optional and the engine did
+not read, which is an absence rather than a wrong value — a generous reading of
+precision is 9 of 14. Neither number is 100%, which is what the synthetic corpus
+reports. The confidence signal is what fails: every one of those wrong values
+came back at the LLM's self-reported 0.9, sitting exactly on the auto-approve
+line. SROIE says it more quietly — 97.3% correct, and both misses (a date read
+as the 16th instead of the 18th, a total of 112.48 against 112.45) also at 0.9.
+**Supervised autonomy on real documents needs a confidence signal the model does
+not grade itself**: cross-field arithmetic, a checksum, a second read. Until
+then the honest configuration for this corpus is the default one, where nothing
+is approved unattended.
+
+**Nothing is rejected any more, and CORD is why.** A receipt yields two of seven
+invoice fields, under the half-schema bar for accepting a document type, and the
+image-only path used to reject it — throwing away a total the model had read
+correctly. 14 of 15 CORD receipts ended that way. They now arrive as
+`human_review` with their fields attached and `<doc_type_uncertain>` flagged,
+and 11 of the 15 totals are exactly right. Of the four that are not, three are
+the model echoing the receipt's own `31.000` for thirty-one thousand rupiah —
+the rule layer normalizes amounts and the LLM layer stores what it was given, so
+the same field reaches the database in two formats depending on which layer read
+it — and one is a genuine misread, 51000 for 51300.
+
+> Field accuracy on the LLM path moves between runs even at `temperature=0`: two
+> runs of the same 25 DocILE invoices measured 84.4% and 82.6%. The routing
+> behaviour is stable; treat the accuracy figures as a percentage point or two
+> wide, and the cost and coverage numbers as exact.
+
 ### Deterministic-only mode
 
 With `LLM_ENABLED=0` (no API key, no spend) the rule layer alone reaches **100% auto-approve precision on 34 documents** at 39 ms p50 / 186 ms p95 and $0.00000 per document. The other 16 are held back rather than guessed at: the 10 scans are **rejected** — with no text layer there is nothing to classify, so document-type confidence is 0 and falls under the 0.6 floor — and the 6 text-layer documents with a deleted field go to **human review**. Field-level accuracy drops to 80.2%, which is the honest cost of removing the model: everything it would have read from an image is simply not extracted. A usable extractor with zero LLM dependency, and the baseline the LLM layer is measured against.
@@ -227,7 +347,7 @@ Below the fold, a searchable document table and latency percentiles for debuggin
 
 ## Tests
 
-103 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
+142 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
 pinned so a rebuild reproduces the versions these numbers were measured on:
 
 ```bash
@@ -258,7 +378,9 @@ unit tests alone never touch the Dockerfiles or the compose file.
 api/            FastAPI app: routers/, engine/ (rules, llm_extractor, confidence, budget), models/, tests/
 n8n/workflows/  doc_processing.json (main pipeline), error_handler.json
 n8n/            validate_workflows.py — structural checks on the workflow JSON
-data/           generate_synthetic.py, samples/, ground_truth.json
+data/           generate_synthetic.py, prepare_real.py, samples/, ground_truth.json
+data/adapters/  DocILE, SROIE and CORD v2 turned into a scoreable manifest of real documents
 eval/           evaluate.py — field accuracy, precision, intervention rate, cost, latency
+eval/compare.py per-field comparators (name / date / amount) for real ground truth
 dashboard/      Streamlit ops view (volume, decisions, cost, latency)
 ```
