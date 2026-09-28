@@ -9,7 +9,7 @@ import re
 from datetime import UTC, datetime
 
 from dateutil import parser as dateparser
-from models.schemas import DocType, ExtractionMethod, FieldResult
+from models.schemas import DocType, Evidence, ExtractionMethod, FieldResult
 from schwifty import IBAN
 from schwifty.exceptions import SchwiftyException
 
@@ -153,7 +153,12 @@ def extract_iban(text: str) -> FieldResult:
         valid = validate_iban(m.group(0))
         if valid:
             # checksum passed -> mathematically validated
-            return FieldResult(value=valid, method=ExtractionMethod.RULE, confidence=CONF_VALIDATED)
+            return FieldResult(
+                value=valid,
+                method=ExtractionMethod.RULE,
+                confidence=CONF_VALIDATED,
+                evidence=Evidence.VERIFIED,
+            )
     return FieldResult()
 
 
@@ -265,6 +270,23 @@ CUSTOMS_EXTRACTORS = {
     "declared_value": extract_declared_value,
     "currency": extract_currency,
 }
+
+
+def verify_checksums(fields: dict[str, FieldResult]) -> dict[str, FieldResult]:
+    """Mark every value a checksum proves as verified, whoever read it.
+
+    A checksum is evidence independent of the reader, so an IBAN the model read
+    off a scan is as verified as one the rule layer found in a text layer. A
+    value that fails keeps its reader's word and nothing more.
+    """
+    iban = fields.get("iban")
+    if iban is None or iban.value is None or iban.evidence == Evidence.VERIFIED:
+        return fields
+    valid = validate_iban(iban.value)
+    if not valid:
+        return fields
+    verified = iban.model_copy(update={"value": valid, "evidence": Evidence.VERIFIED})
+    return {**fields, "iban": verified}
 
 
 def run_rule_layer(text: str, doc_type: DocType) -> dict[str, FieldResult]:

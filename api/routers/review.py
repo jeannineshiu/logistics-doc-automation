@@ -2,7 +2,7 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException
 from models.db import AuditLog, Document, get_session
-from models.schemas import ReviewRequest
+from models.schemas import Evidence, ExtractionMethod, FieldResult, ReviewRequest
 from sqlalchemy.orm import Session
 
 router = APIRouter(tags=["review"])
@@ -24,10 +24,19 @@ def submit_review(document_id: str, body: ReviewRequest, db: Session = Depends(g
         old = fields[name].get("value")
         if old != corrected:
             diff[name] = {"from": old, "to": corrected}
-            # Human-corrected values are ground truth: confidence 1.0, method stays
-            # recorded in the audit log. Stored corrections double as a future
-            # fine-tuning / few-shot dataset.
-            fields[name] = {"value": corrected, "method": "human", "confidence": 1.0}
+            # A reviewer's value is a person's judgement, not proof: its evidence
+            # is `reviewed`, kept apart from `verified` because people mistype
+            # and misread. Stored corrections double as a future fine-tuning /
+            # few-shot dataset, which is one more reason to know which is which.
+            # A reviewer who clears a value leaves nothing to vouch for: the
+            # field has no evidence, like any missing field, and method=human
+            # is what records that a person emptied it.
+            fields[name] = FieldResult(
+                value=corrected,
+                method=ExtractionMethod.HUMAN,
+                confidence=1.0,
+                evidence=Evidence.REVIEWED,
+            ).model_dump(mode="json")
 
     doc.fields = fields
     doc.status = "approved"

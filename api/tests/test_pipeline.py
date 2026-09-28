@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from engine import rules
 from engine.pipeline import process_document
-from models.schemas import Decision, DocType, ExtractionMethod
+from models.schemas import Decision, DocType, Evidence, ExtractionMethod
 from PIL import Image
 
 from tests.conftest import make_pdf
@@ -52,6 +52,48 @@ def test_rule_layer_resolves_fields_without_calling_llm():
     assert client.calls == 1
     assert client.requested_fields[0] == ["supplier_name"]
     assert res.tokens_used == 1000
+
+
+def test_a_checksum_valid_iban_is_verified():
+    res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-ev1", llm_client=FakeClient())
+    assert res.fields.iban.evidence == Evidence.VERIFIED
+
+
+NO_IBAN_LINES = [ln for ln in INVOICE_LINES if not ln.startswith("IBAN")]
+
+
+def test_an_iban_the_model_read_is_verified_when_its_checksum_passes():
+    # the checksum is evidence whoever read the value, so a model read can be verified too
+    client = FakeClient(value="DE89 3704 0044 0532 0130 00")
+    res = process_document(make_pdf(NO_IBAN_LINES), "inv.pdf", "doc-ev4", llm_client=client)
+    assert res.fields.iban.method == ExtractionMethod.LLM
+    assert res.fields.iban.evidence == Evidence.VERIFIED
+
+
+def test_an_iban_the_model_read_is_uncorroborated_when_its_checksum_fails():
+    client = FakeClient(value="DE00 3704 0044 0532 0130 00")
+    res = process_document(make_pdf(NO_IBAN_LINES), "inv.pdf", "doc-ev5", llm_client=client)
+    assert res.fields.iban.value is not None
+    assert res.fields.iban.evidence == Evidence.UNCORROBORATED
+
+
+def test_an_unchecked_value_is_uncorroborated_whether_rule_or_model_read_it():
+    res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-ev2", llm_client=FakeClient())
+    # read by the rule layer from its label, by its format, and by the model: one reader's word each
+    assert res.fields.invoice_number.method == ExtractionMethod.RULE
+    assert res.fields.invoice_number.evidence == Evidence.UNCORROBORATED
+    assert res.fields.invoice_date.method == ExtractionMethod.RULE
+    assert res.fields.invoice_date.evidence == Evidence.UNCORROBORATED
+    assert res.fields.supplier_name.method == ExtractionMethod.LLM
+    assert res.fields.supplier_name.evidence == Evidence.UNCORROBORATED
+
+
+def test_a_missing_field_has_no_evidence():
+    res = process_document(
+        make_pdf(INVOICE_LINES), "inv.pdf", "doc-ev3", llm_client=FakeClient(value=None, confidence=0)
+    )
+    assert res.fields.supplier_name.value is None
+    assert res.fields.supplier_name.evidence is None
 
 
 def test_llm_asked_only_for_missing_fields():

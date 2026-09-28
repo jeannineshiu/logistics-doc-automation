@@ -1,6 +1,8 @@
 """API tests — LLM disabled (LLM_ENABLED=0), so extraction is rule-layer only.
 No OpenAI credits are spent; everything runs in CI."""
 
+from tests.conftest import make_pdf
+
 
 def _upload(client, pdf_bytes, name="doc.pdf"):
     return client.post("/extract", files={"file": (name, pdf_bytes, "application/pdf")})
@@ -52,6 +54,35 @@ def test_extract_invoice_rule_layer(client, invoice_pdf):
     assert body["cost_usd"] == 0
 
 
+def test_extract_reports_evidence_and_replays_it_from_storage(client, invoice_pdf):
+    first = _upload(client, invoice_pdf).json()
+    assert first["fields"]["iban"]["evidence"] == "verified"
+    assert first["fields"]["invoice_number"]["evidence"] == "uncorroborated"
+
+    replayed = _upload(client, invoice_pdf).json()
+    assert replayed["fields"] == first["fields"]
+
+
+def test_a_document_stored_before_evidence_existed_reads_back_uncorroborated(client):
+    from models.db import Document, SessionLocal
+
+    # the shape every row had before fields carried evidence
+    with SessionLocal() as db:
+        db.add(Document(
+            id="pre-evidence", file_hash="0" * 64, filename="old.pdf", doc_type="invoice",
+            status="pending_review", decision="human_review", flagged_fields=[],
+            fields={
+                "invoice_number": {"value": "INV-1", "method": "rule", "confidence": 0.9},
+                "iban": {"value": None, "method": "missing", "confidence": 0.0},
+            },
+        ))
+        db.commit()
+
+    fields = client.get("/documents/pre-evidence").json()["fields"]
+    assert fields["invoice_number"]["evidence"] == "uncorroborated"
+    assert fields["iban"]["evidence"] is None
+
+
 def test_extract_is_idempotent(client, invoice_pdf):
     first = _upload(client, invoice_pdf).json()
     second = _upload(client, invoice_pdf).json()
@@ -98,6 +129,43 @@ def test_review_flow(client, invoice_pdf):
     assert detail["status"] == "approved"
     assert detail["fields"]["supplier_name"]["confidence"] == 1.0
     assert any(a["action"] == "review_submitted" for a in detail["audit_trail"])
+
+
+def test_a_correction_is_stored_as_reviewed(client):
+    # no IBAN, which the default required set demands: the document must wait for a reviewer
+    pdf = make_pdf([
+        "INVOICE",
+        "Invoice No: INV-2025-00077",
+        "Invoice date: 15.03.2025",
+        "Supplier: Muster Logistik GmbH",
+        "USt-ID: DE123456789",
+        "Total amount: EUR 1.234,56",
+    ])
+    body = _upload(client, pdf).json()
+    assert body["status"] == "pending_review"
+
+    client.post(
+        f"/review/{body['document_id']}",
+        json={"corrected_fields": {"iban": "DE89370400440532013000"}, "reviewer": "jeannine"},
+    )
+    iban = client.get(f"/documents/{body['document_id']}").json()["fields"]["iban"]
+    assert iban["method"] == "human"
+    assert iban["evidence"] == "reviewed"
+
+
+def test_a_value_a_reviewer_clears_has_no_evidence(client):
+    pdf = make_pdf(["INVOICE", "Invoice No: INV-2025-00078", "Supplier: Muster Logistik GmbH"])
+    body = _upload(client, pdf).json()
+    assert body["status"] == "pending_review"
+
+    client.post(
+        f"/review/{body['document_id']}",
+        json={"corrected_fields": {"supplier_name": None}, "reviewer": "jeannine"},
+    )
+    supplier = client.get(f"/documents/{body['document_id']}").json()["fields"]["supplier_name"]
+    assert supplier["value"] is None
+    assert supplier["method"] == "human"
+    assert supplier["evidence"] is None
 
 
 def test_review_wrong_status_conflict(client, invoice_pdf):

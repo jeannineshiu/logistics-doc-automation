@@ -74,6 +74,7 @@ def process_document(
             page_pngs, budget, llm_client
         )
 
+    fields = rules.verify_checksums(fields)
     decision, flagged = conf_mod.route(fields, doc_type_conf, budget_exceeded, doc_type)
     overall = conf_mod.overall_confidence(fields, doc_type)
     latency_ms = int((time.monotonic() - start) * 1000)
