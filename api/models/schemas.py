@@ -18,6 +18,20 @@ class ExtractionMethod(str, Enum):
     MISSING = "missing"    # neither layer extracted it
 
 
+class Evidence(str, Enum):
+    """What stands behind a field value, independent of its reader's confidence.
+
+    See CONTEXT.md. ADR-0003 (proposed) moves auto-approval onto this, because a
+    reader's own confidence cannot separate a right value from a wrong one.
+    Until that lands, routing still reads field confidence.
+    """
+
+    VERIFIED = "verified"                # a checksum passed
+    CORROBORATED = "corroborated"        # two independent readers agree
+    REVIEWED = "reviewed"                # a reviewer supplied or confirmed it
+    UNCORROBORATED = "uncorroborated"    # one reader's word, nothing more
+
+
 class Decision(str, Enum):
     AUTO_APPROVE = "auto_approve"
     HUMAN_REVIEW = "human_review"
@@ -44,6 +58,19 @@ class FieldResult(BaseModel):
     value: str | None = None
     method: ExtractionMethod = ExtractionMethod.MISSING
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidence: Evidence | None = None
+
+    @model_validator(mode="after")
+    def _evidence_defaults_to_the_weakest(self):
+        # A value nobody vouched for is one reader's word. Defaulting here, not
+        # at each reader, means a reader that forgets to say so understates its
+        # evidence instead of overstating it, and a row stored before evidence
+        # existed replays as uncorroborated. A missing value has nothing behind it.
+        if self.value is None:
+            self.evidence = None
+        elif self.evidence is None:
+            self.evidence = Evidence.UNCORROBORATED
+        return self
 
 
 INVOICE_FIELDS = [

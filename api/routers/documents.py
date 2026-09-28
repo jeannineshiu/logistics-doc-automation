@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from models.db import AuditLog, Document, get_session
+from models.schemas import FieldResult
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -46,7 +47,11 @@ def get_document(document_id: str, db: Session = Depends(get_session)):
     ).all()
     return {
         **_summary(doc),
-        "fields": doc.fields,
+        # Read through FieldResult, as /extract's replay does, so a row stored
+        # before fields carried evidence reports it here too, not only there.
+        "fields": {
+            name: FieldResult(**f).model_dump(mode="json") for name, f in (doc.fields or {}).items()
+        },
         "flagged_fields": doc.flagged_fields,
         "audit_trail": [
             {
