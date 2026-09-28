@@ -14,3 +14,7 @@ data/real/
 
 # DocILE: 1.1 GB of licensed documents, downloaded per token — see data/adapters/docile.py
 data/docile/
+
+# Personal notes
+.obsidian/
+notes/
