@@ -2,8 +2,8 @@
 
 A rule-layer value that no checksum proves is one reader's word: on real
 invoices the rule layer truncated a total, took a line amount for the total and
-kept a character the text layer had misread, all above the auto-approve
-threshold (ADR-0003, proposed). The model reads the page image rather than the
+kept a character the text layer had misread, each at a field confidence of
+0.92 to 0.95 (ADR-0003, proposed). The model reads the page image rather than the
 text layer, so it does not repeat those mistakes; where it produces the same
 value, the value is corroborated.
 """

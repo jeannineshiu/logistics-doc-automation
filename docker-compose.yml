@@ -27,8 +27,10 @@ services:
       RULE_LAYER_ENABLED: ${RULE_LAYER_ENABLED:-1}
       MAX_TOKENS_PER_DOC: ${MAX_TOKENS_PER_DOC:-8000}
       MAX_LLM_CALLS_PER_DOC: ${MAX_LLM_CALLS_PER_DOC:-2}
-      AUTO_APPROVE_THRESHOLD: ${AUTO_APPROVE_THRESHOLD:-0.90}
-      REVIEW_FLOOR_THRESHOLD: ${REVIEW_FLOOR_THRESHOLD:-0.50}
+      # Removed settings, passed through only so that a .env still setting one
+      # stops the API at startup instead of being dropped here unnoticed.
+      AUTO_APPROVE_THRESHOLD: ${AUTO_APPROVE_THRESHOLD:-}
+      REVIEW_FLOOR_THRESHOLD: ${REVIEW_FLOOR_THRESHOLD:-}
       # Unset means every field in the schema must be present — see .env.example
       REQUIRED_FIELDS_INVOICE: ${REQUIRED_FIELDS_INVOICE:-}
       REQUIRED_FIELDS_CUSTOMS_FORM: ${REQUIRED_FIELDS_CUSTOMS_FORM:-}

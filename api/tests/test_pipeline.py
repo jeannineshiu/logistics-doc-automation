@@ -6,9 +6,8 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from engine import rules
 from engine.pipeline import process_document
-from models.schemas import Decision, DocType, Evidence, ExtractionMethod
+from models.schemas import Decision, DocType, Evidence, ExtractionMethod, FlagReason
 from openai import APIConnectionError
 from PIL import Image
 
@@ -230,15 +229,24 @@ def test_an_amount_that_differs_past_the_second_decimal_is_a_conflict():
 
 COMPLETE_LINES = [*INVOICE_LINES, "Supplier: Muster Logistik GmbH"]
 
+# What a model reading COMPLETE_LINES correctly returns, in its own formats.
+AGREEING = {
+    "invoice_number": "INV-2025-00042",
+    "invoice_date": "15 March 2025",
+    "supplier_name": "Muster Logistik GmbH",
+    "supplier_vat_id": "DE123456789",
+    "currency": "EUR",
+    "total_amount": "1,234.56",
+}
+
 
 @pytest.mark.parametrize(
     "client",
     [
-        FakeClient(tokens=9000),                                        # blows MAX_TOKENS_PER_DOC
         FakeClient(error=APIConnectionError(request=httpx.Request("POST", "https://x"))),
         FakeClient(content="not json"),                                 # unparseable, twice
     ],
-    ids=["budget-exceeded", "api-error", "unparseable"],
+    ids=["api-error", "unparseable"],
 )
 def test_a_failed_corroboration_call_leaves_the_document_as_the_rule_layer_read_it(client):
     # every field is in the text layer, so the call was only ever for corroboration
@@ -246,9 +254,18 @@ def test_a_failed_corroboration_call_leaves_the_document_as_the_rule_layer_read_
     without_model = process_document(pdf, "inv.pdf", "doc-f0", llm_enabled=False)
     res = process_document(pdf, "inv.pdf", "doc-f1", llm_client=client)
     assert client.calls >= 1
-    assert res.decision == without_model.decision
+    assert res.decision == without_model.decision == Decision.HUMAN_REVIEW
     assert res.flagged_fields == without_model.flagged_fields
     assert res.fields == without_model.fields
+
+
+def test_a_corroboration_call_that_exceeds_the_budget_is_flagged_as_such():
+    # a budget overrun must never become an approval, nor pass for an ordinary doubt
+    client = FakeClient(tokens=9000, values=AGREEING)                  # blows MAX_TOKENS_PER_DOC
+    res = process_document(make_pdf(COMPLETE_LINES), "inv.pdf", "doc-f2", llm_client=client)
+    assert res.decision == Decision.HUMAN_REVIEW
+    assert res.flagged_fields[0] == "<budget_exceeded>"
+    assert res.fields.invoice_number.evidence == Evidence.UNCORROBORATED
 
 
 def test_a_corroborated_value_carries_no_candidates():
@@ -297,12 +314,6 @@ def test_budget_exceeded_routes_to_review():
     assert "<budget_exceeded>" in res.flagged_fields
 
 
-def test_low_llm_confidence_routes_to_review():
-    client = FakeClient(confidence=0.4)
-    res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-6", llm_client=client)
-    assert res.decision == Decision.HUMAN_REVIEW
-
-
 def test_unknown_document_is_rejected():
     res = process_document(make_pdf(["a memo about nothing"]), "x.pdf", "doc-7", llm_enabled=False)
     assert res.doc_type == DocType.UNKNOWN
@@ -310,21 +321,87 @@ def test_unknown_document_is_rejected():
     assert res.fields is None
 
 
-def test_complete_text_layer_invoice_auto_approves(invoice_pdf):
-    """Pin the CONF_LABELED boundary as a decision, not as a number.
-
-    supplier_name has no validator to pass, so a labeled capture scores
-    CONF_LABELED — deliberately equal to the default auto-approve threshold.
-    Every other field validates higher, so a fully labeled invoice clears
-    review with no LLM call. If either constant drifts, this names the
-    decision that changed.
-    """
-    res = process_document(invoice_pdf, "inv.pdf", "doc-8", llm_enabled=False)
+def test_a_document_whose_required_fields_are_all_verified_or_corroborated_auto_approves():
+    client = FakeClient(values=AGREEING)
+    res = process_document(make_pdf(COMPLETE_LINES), "inv.pdf", "doc-8", llm_client=client)
     assert res.decision == Decision.AUTO_APPROVE
     assert res.flagged_fields == []
+    assert res.flag_reasons == {}
+    assert res.fields.iban.evidence == Evidence.VERIFIED
+    assert all(f.evidence == Evidence.CORROBORATED for name, f in res.fields if name != "iban")
+    assert client.calls == 1
+
+
+def test_field_confidence_plays_no_part_in_routing():
+    # the model's own confidence is a claim: agreement at 0.1 is still agreement,
+    # and a read nobody corroborates at 1.0 is still one reader's word
+    doubtful = FakeClient(values=AGREEING, confidence=0.1)
+    res = process_document(make_pdf(COMPLETE_LINES), "inv.pdf", "doc-c1", llm_client=doubtful)
+    assert res.decision == Decision.AUTO_APPROVE
+
+    sure = FakeClient(values=AGREEING, confidence=1.0)
+    res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-c2", llm_client=sure)
+    assert res.fields.supplier_name.confidence == 1.0
+    assert res.decision == Decision.HUMAN_REVIEW
+
+
+def test_a_required_field_only_the_model_read_is_flagged_uncorroborated():
+    # INVOICE_LINES has no supplier line: the model is its only reader
+    client = FakeClient(values=AGREEING)
+    res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-r1", llm_client=client)
+    assert res.fields.supplier_name.method == ExtractionMethod.LLM
+    assert res.decision == Decision.HUMAN_REVIEW
+    assert res.flagged_fields == ["supplier_name"]
+    assert res.flag_reasons == {"supplier_name": FlagReason.UNCORROBORATED}
+
+
+def test_a_required_field_in_conflict_is_flagged_as_a_conflict():
+    client = FakeClient(values=AGREEING | {"total_amount": "10903.74"})
+    res = process_document(make_pdf(COMPLETE_LINES), "inv.pdf", "doc-r2", llm_client=client)
+    assert res.decision == Decision.HUMAN_REVIEW
+    assert res.flagged_fields == ["total_amount"]
+    assert res.flag_reasons == {"total_amount": FlagReason.CONFLICT}
+
+
+def test_a_required_field_nobody_read_is_flagged_missing():
+    client = FakeClient(values=AGREEING | {"supplier_name": None})
+    res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-r3", llm_client=client)
+    assert res.decision == Decision.HUMAN_REVIEW
+    assert res.flag_reasons == {"supplier_name": FlagReason.MISSING}
+
+
+def test_an_uncorroborated_optional_field_does_not_block_auto_approval(monkeypatch):
+    monkeypatch.setenv(
+        "REQUIRED_FIELDS_INVOICE", "invoice_number,invoice_date,supplier_name,total_amount"
+    )
+    # the model reads the VAT id differently and cannot read the currency at all
+    client = FakeClient(values=AGREEING | {"supplier_vat_id": "DE123456780", "currency": None})
+    res = process_document(make_pdf(COMPLETE_LINES), "inv.pdf", "doc-o1", llm_client=client)
+    assert res.decision == Decision.AUTO_APPROVE
+    assert res.flagged_fields == []
+    # stored with what stands behind it, so a consumer can tell doubt from absence
+    assert res.fields.currency.value == "EUR"
+    assert res.fields.currency.evidence == Evidence.UNCORROBORATED
+    assert len(res.fields.supplier_vat_id.candidates) == 2
+
+
+def test_with_the_model_disabled_nothing_unverified_auto_approves():
+    res = process_document(make_pdf(COMPLETE_LINES), "inv.pdf", "doc-d1", llm_enabled=False)
+    assert res.decision == Decision.HUMAN_REVIEW
     assert res.tokens_used == 0
-    assert res.fields.supplier_name.method == ExtractionMethod.RULE
-    assert res.fields.supplier_name.confidence == rules.CONF_LABELED
+    assert set(res.flagged_fields) == set(AGREEING)
+    assert set(res.flag_reasons.values()) == {FlagReason.UNCORROBORATED}
+
+
+def test_a_pure_llm_run_auto_approves_nothing():
+    # every field has the model as its only reader, however right it is
+    client = FakeClient(values=AGREEING | {"iban": "DE89 3704 0044 0532 0130 00"})
+    res = process_document(
+        make_pdf(COMPLETE_LINES), "inv.pdf", "doc-p1", llm_client=client, rules_enabled=False
+    )
+    assert res.decision == Decision.HUMAN_REVIEW
+    assert "iban" not in res.flagged_fields, "the checksum still proves the IBAN"
+    assert set(res.flagged_fields) == set(AGREEING)
 
 
 US_INVOICE_LINES = [
@@ -390,24 +467,38 @@ def test_an_image_nothing_was_read_from_is_still_rejected():
     assert res.fields is None
 
 
+US_AGREEING = {
+    "invoice_number": "22334",
+    "invoice_date": "March 25, 2025",
+    "supplier_name": "Cumulus Broadcasting LLC",
+    "currency": "USD",
+    "total_amount": "1082.50",
+    "iban": None,
+    "supplier_vat_id": None,
+}
+
+
 def test_us_invoice_is_unapprovable_until_the_required_set_says_so(monkeypatch):
     """The same document, the same extraction, two configurations.
 
     Measured on DocILE: an IBAN is absent from every US invoice, so with the
     default required set no US document can ever clear review.
     """
-    res = process_document(make_pdf(US_INVOICE_LINES), "us.pdf", "doc-11", llm_enabled=False)
+    client = FakeClient(values=US_AGREEING)
+    res = process_document(make_pdf(US_INVOICE_LINES), "us.pdf", "doc-11", llm_client=client)
     assert res.decision == Decision.HUMAN_REVIEW
     # A US layout matches one classifier keyword and lands at 0.6 — one hair
     # above the reject floor — so the type is flagged as a guess alongside the
     # two fields the document does not carry.
     assert set(res.flagged_fields) == {"<doc_type_uncertain>", "iban", "supplier_vat_id"}
+    assert res.flag_reasons == {"iban": FlagReason.MISSING, "supplier_vat_id": FlagReason.MISSING}
 
     monkeypatch.setenv(
         "REQUIRED_FIELDS_INVOICE",
         "invoice_number,invoice_date,supplier_name,currency,total_amount",
     )
-    res = process_document(make_pdf(US_INVOICE_LINES), "us.pdf", "doc-12", llm_enabled=False)
+    client = FakeClient(values=US_AGREEING)
+    res = process_document(make_pdf(US_INVOICE_LINES), "us.pdf", "doc-12", llm_client=client)
     assert res.decision == Decision.AUTO_APPROVE
     assert res.flagged_fields == []
     assert res.fields.iban.value is None, "still absent, just no longer disqualifying"

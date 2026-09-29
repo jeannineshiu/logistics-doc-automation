@@ -1,6 +1,8 @@
 """API tests — LLM disabled (LLM_ENABLED=0), so extraction is rule-layer only.
 No OpenAI credits are spent; everything runs in CI."""
 
+import pytest
+
 from tests.conftest import make_pdf
 
 
@@ -227,3 +229,26 @@ def test_metrics_endpoint(client, invoice_pdf):
     assert "documents_processed_total 1" in text
     assert "human_review_rate" in text
     assert "tokens_used_total" in text
+
+
+@pytest.mark.parametrize("name", ["AUTO_APPROVE_THRESHOLD", "REVIEW_FLOOR_THRESHOLD"])
+def test_the_api_refuses_to_start_with_a_removed_threshold_set(monkeypatch, name):
+    """A deployment that sets one believes it tightened a safety setting that
+    no longer does anything, so the API stops instead of ignoring it."""
+    from fastapi.testclient import TestClient
+    from main import app
+
+    monkeypatch.setenv(name, "0.95")
+    with pytest.raises(RuntimeError, match="evidence replaced it"), TestClient(app):
+        pass
+
+
+def test_flag_reasons_are_reported_and_replayed_from_storage(client, invoice_pdf):
+    # LLM_ENABLED=0 in tests: nothing is corroborated, so every rule read needs a reviewer
+    first = _upload(client, invoice_pdf).json()
+    assert first["decision"] == "human_review"
+    assert first["flag_reasons"]["total_amount"] == "uncorroborated"
+    assert "iban" not in first["flag_reasons"], "the checksum verified it"
+
+    replayed = _upload(client, invoice_pdf).json()
+    assert replayed["flag_reasons"] == first["flag_reasons"]

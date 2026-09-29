@@ -2,7 +2,7 @@
 
 from enum import Enum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 
 class DocType(str, Enum):
@@ -21,15 +21,28 @@ class ExtractionMethod(str, Enum):
 class Evidence(str, Enum):
     """What stands behind a field value, independent of its reader's confidence.
 
-    See CONTEXT.md. ADR-0003 (proposed) moves auto-approval onto this, because a
+    See CONTEXT.md. Auto-approval is decided on this (ADR-0003, proposed), because a
     reader's own confidence cannot separate a right value from a wrong one.
-    Until that lands, routing still reads field confidence.
     """
 
     VERIFIED = "verified"                # a checksum passed
     CORROBORATED = "corroborated"        # two independent readers agree
     REVIEWED = "reviewed"                # a reviewer supplied or confirmed it
     UNCORROBORATED = "uncorroborated"    # one reader's word, nothing more
+
+
+#: The evidence a required field needs before a document can be auto-approved.
+#: Reviewed is not among them: a reviewer's judgement settles a review, it does
+#: not stand in for proof when the engine decides.
+APPROVABLE_EVIDENCE = frozenset({Evidence.VERIFIED, Evidence.CORROBORATED})
+
+
+class FlagReason(str, Enum):
+    """Why a required field is flagged, so a reviewer knows what check it needs."""
+
+    MISSING = "missing"                  # nobody read a value
+    UNCORROBORATED = "uncorroborated"    # one reader's word, nothing more
+    CONFLICT = "conflict"                # independent readers disagree
 
 
 class Decision(str, Enum):
@@ -82,6 +95,17 @@ class FieldResult(BaseModel):
         elif self.evidence is None:
             self.evidence = Evidence.UNCORROBORATED
         return self
+
+    @property
+    def flag_reason(self) -> FlagReason | None:
+        """What stops this value counting toward auto-approval, if anything."""
+        if self.value is None:
+            return FlagReason.MISSING
+        if self.candidates:
+            return FlagReason.CONFLICT
+        if self.evidence not in APPROVABLE_EVIDENCE:
+            return FlagReason.UNCORROBORATED
+        return None
 
 
 INVOICE_FIELDS = [
@@ -138,6 +162,23 @@ class ExtractionResponse(BaseModel):
     cost_usd: float
     latency_ms: int
     flagged_fields: list[str] = []
+
+    @computed_field
+    @property
+    def flag_reasons(self) -> dict[str, FlagReason]:
+        """Why each flagged field is flagged. Document flags (`<...>`) have none.
+
+        Derived from the fields rather than stored beside them, so a replayed
+        document reports the same reasons and the two can never disagree.
+        """
+        if self.fields is None:
+            return {}
+        reasons = {}
+        for name in self.flagged_fields:
+            field = getattr(self.fields, name, None)
+            if field is not None and field.flag_reason is not None:
+                reasons[name] = field.flag_reason
+        return reasons
 
     @model_validator(mode="after")
     def _default_status_from_decision(self):
