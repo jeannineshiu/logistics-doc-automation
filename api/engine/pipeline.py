@@ -9,12 +9,12 @@ from models.schemas import (
     ExtractionResponse,
     FieldResult,
 )
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
 
 from engine import confidence as conf_mod
-from engine import rules
+from engine import corroboration, rules
 from engine.budget import BudgetExceeded, TokenBudget
-from engine.llm_extractor import extract_missing_fields
+from engine.llm_extractor import extract_fields
 from engine.pdf_utils import load_document
 
 # blended $/token used for reporting (input-heavy vision workload)
@@ -58,16 +58,25 @@ def process_document(
             if rules_enabled
             else {name: FieldResult() for name in FIELD_NAMES[doc_type]}
         )
-        # Layer 2: LLM only for the gaps
+        # Layer 2: the LLM reads the gaps, and a second time what the rule layer
+        # read without proof, in one call (ADR-0003, proposed)
         missing = [k for k, f in fields.items() if f.value is None]
-        if missing and llm_enabled:
+        to_corroborate = corroboration.needs_corroboration(fields)
+        if (missing or to_corroborate) and llm_enabled:
             try:
-                llm_results = extract_missing_fields(
-                    page_pngs, doc_type, missing, budget, client=llm_client
+                llm_results = extract_fields(
+                    page_pngs, doc_type, missing + to_corroborate, budget, client=llm_client
                 )
-                fields.update(llm_results)
-            except BudgetExceeded:
-                budget_exceeded = True
+                fields = corroboration.combine(fields, llm_results)
+            except (BudgetExceeded, OpenAIError) as exc:
+                # A call made only to corroborate is a second opinion the
+                # document was processed without before: if it fails, the
+                # values stay uncorroborated and the document routes exactly
+                # as it did. A call that was also filling gaps fails as before.
+                if missing and isinstance(exc, BudgetExceeded):
+                    budget_exceeded = True
+                elif missing:
+                    raise
     elif page_pngs and llm_enabled:
         # No usable text layer (scan/photo) — ask the LLM to identify + extract.
         doc_type, doc_type_conf, fields, budget_exceeded = _llm_full_extraction(
@@ -113,7 +122,7 @@ def _llm_full_extraction(
     best: tuple[DocType, dict[str, FieldResult], int] = (DocType.UNKNOWN, {}, 0)
     for doc_type in (DocType.INVOICE, DocType.CUSTOMS_FORM):
         try:
-            results = extract_missing_fields(
+            results = extract_fields(
                 page_pngs, doc_type, FIELD_NAMES[doc_type], budget, client=llm_client
             )
         except BudgetExceeded:

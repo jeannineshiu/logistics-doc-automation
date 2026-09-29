@@ -4,9 +4,12 @@ import io
 import json
 from types import SimpleNamespace
 
+import httpx
+import pytest
 from engine import rules
 from engine.pipeline import process_document
 from models.schemas import Decision, DocType, Evidence, ExtractionMethod
+from openai import APIConnectionError
 from PIL import Image
 
 from tests.conftest import make_pdf
@@ -21,36 +24,52 @@ INVOICE_LINES = [
 ]
 
 
-class FakeClient:
-    """Returns a fixed value + confidence for every requested field."""
+def replace_line(prefix: str, line: str) -> list[str]:
+    return [ln for ln in INVOICE_LINES if not ln.startswith(prefix)] + [line]
 
-    def __init__(self, value="LLM-VALUE", confidence=0.95, tokens=1000):
+
+class FakeClient:
+    """Returns a fixed value + confidence for every requested field, or a
+    per-field value from `values` where one is given."""
+
+    def __init__(
+        self, value="LLM-VALUE", confidence=0.95, tokens=1000, values=None, error=None, content=None
+    ):
         self.calls = 0
         self.requested_fields = []
+        self.prompts = []
         self._value, self._conf, self._tokens = value, confidence, tokens
+        self._values = values or {}
+        self._error, self._content = error, content
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
     def _create(self, **kwargs):
         self.calls += 1
+        if self._error:
+            raise self._error
         prompt = kwargs["messages"][0]["content"][0]["text"]
+        self.prompts.append(prompt)
         fields = [ln.split('"')[1] for ln in prompt.splitlines() if ln.startswith('- "')]
         self.requested_fields.append(fields)
-        payload = {"fields": {f: {"value": self._value, "confidence": self._conf} for f in fields}}
+        payload = {"fields": {
+            f: {"value": self._values.get(f, self._value), "confidence": self._conf} for f in fields
+        }}
+        content = self._content if self._content is not None else json.dumps(payload)
         return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+            choices=[SimpleNamespace(message=SimpleNamespace(content=content))],
             usage=SimpleNamespace(total_tokens=self._tokens),
         )
 
 
-def test_rule_layer_resolves_fields_without_calling_llm():
+def test_the_gaps_and_the_corroboration_go_out_in_one_llm_call():
     client = FakeClient()
     res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-1", llm_client=client)
     assert res.doc_type == DocType.INVOICE
     assert res.fields.iban.method == ExtractionMethod.RULE
     assert res.fields.iban.confidence == 1.0
-    # only supplier_name is unlabeled in this layout, so exactly one LLM call
+    # supplier_name is unlabeled in this layout and the rest need a second reader:
+    # still exactly one LLM call
     assert client.calls == 1
-    assert client.requested_fields[0] == ["supplier_name"]
     assert res.tokens_used == 1000
 
 
@@ -96,12 +115,155 @@ def test_a_missing_field_has_no_evidence():
     assert res.fields.supplier_name.evidence is None
 
 
-def test_llm_asked_only_for_missing_fields():
+def test_a_rule_value_the_model_reproduces_is_corroborated_in_one_call():
+    client = FakeClient(values={"invoice_number": "INV-2025-00042"})
+    res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-co1", llm_client=client)
+    assert res.fields.invoice_number.value == "INV-2025-00042"
+    assert res.fields.invoice_number.evidence == Evidence.CORROBORATED
+    assert client.calls == 1
+
+
+def test_a_rule_value_the_model_contradicts_is_a_conflict_carrying_both_candidates():
+    # a DocILE failure shape: the rule layer took a line amount for the total
+    lines = replace_line("Total", "Total amount: EUR 121,72")
+    client = FakeClient(values={"total_amount": "243.44"})
+    res = process_document(make_pdf(lines), "inv.pdf", "doc-co2", llm_client=client)
+    total = res.fields.total_amount
+    assert total.evidence == Evidence.UNCORROBORATED
+    assert [(c.value, c.method) for c in total.candidates] == [
+        ("121.72", ExtractionMethod.RULE),
+        ("243.44", ExtractionMethod.LLM),
+    ]
+
+
+def test_an_amount_or_date_formatted_differently_by_the_two_readers_still_corroborates():
+    client = FakeClient(values={"total_amount": "1,234.56", "invoice_date": "15 March 2025"})
+    res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-co4", llm_client=client)
+    assert res.fields.total_amount.evidence == Evidence.CORROBORATED
+    assert res.fields.invoice_date.evidence == Evidence.CORROBORATED
+
+
+@pytest.mark.parametrize(
+    ("field", "text_line", "rule_value", "model_value"),
+    [
+        # the three wrong values the rule layer read off real DocILE invoices
+        ("total_amount", "Total amount: EUR 903,74", "903.74", "10903.74"),        # truncated
+        ("total_amount", "Total amount: EUR 121,72", "121.72", "243.44"),          # a line amount
+        ("invoice_number", "Invoice No: PMILD3-98", "PMILD3-98", "PM/LD3-98"),    # misread character
+    ],
+    ids=["truncated-total", "line-amount-as-total", "misread-character"],
+)
+def test_the_docile_failure_shapes_end_in_conflict_when_the_model_reads_right(
+    field, text_line, rule_value, model_value
+):
+    lines = replace_line(text_line.split(":")[0], text_line)
+    client = FakeClient(values={field: model_value})
+    res = process_document(make_pdf(lines), "inv.pdf", f"doc-{field}", llm_client=client)
+    result = getattr(res.fields, field)
+    assert result.value == rule_value
+    assert result.evidence == Evidence.UNCORROBORATED
+    assert [c.value for c in result.candidates] == [rule_value, model_value]
+
+
+def test_the_prompt_never_reveals_what_the_rule_layer_read():
+    # a model shown the rule layer's answer is no longer an independent reader
+    # values chosen so none can coincide with the prompt's own format examples
+    lines = [
+        "INVOICE",
+        "Invoice No: INV-7731-QZ",
+        "Invoice date: 21.08.2024",
+        "USt-ID: DE987654321",
+        "Total amount: CHF 8.642,19",
+    ]
+    client = FakeClient()
+    res = process_document(make_pdf(lines), "inv.pdf", "doc-co5", llm_client=client)
+    read = [f.value for _, f in res.fields if f.method == ExtractionMethod.RULE]
+    assert {"INV-7731-QZ", "2024-08-21", "DE987654321", "8642.19"} <= set(read)
+    for value in (*read, "21.08.2024", "8.642,19"):
+        assert value not in client.prompts[0]
+
+
+def test_a_rule_value_the_model_could_not_read_stays_uncorroborated_without_conflict():
+    client = FakeClient(values={"invoice_number": None})
+    res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-co6", llm_client=client)
+    assert res.fields.invoice_number.value == "INV-2025-00042"
+    assert res.fields.invoice_number.evidence == Evidence.UNCORROBORATED
+    assert res.fields.invoice_number.candidates == []
+
+
+def test_with_the_model_disabled_nothing_is_corroborated():
+    res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-co7", llm_enabled=False)
+    assert res.fields.iban.evidence == Evidence.VERIFIED
+    others = [f for name, f in res.fields if name != "iban" and f.value is not None]
+    assert others and all(f.evidence == Evidence.UNCORROBORATED for f in others)
+
+
+@pytest.mark.parametrize(
+    ("model_value", "evidence"),
+    [
+        ("2025-05-04", Evidence.CORROBORATED),     # the same day, written as ISO
+        ("04 May 2025", Evidence.CORROBORATED),    # the same day, spelled out
+        ("05.04.2025", Evidence.UNCORROBORATED),   # 5 April: a different day, not a format
+    ],
+)
+def test_an_ambiguous_date_corroborates_only_when_it_is_the_same_day(model_value, evidence):
+    lines = replace_line("Invoice date", "Invoice date: 04.05.2025")   # 4 May, day first
+    client = FakeClient(values={"invoice_date": model_value})
+    res = process_document(make_pdf(lines), "inv.pdf", "doc-dt", llm_client=client)
+    assert res.fields.invoice_date.value == "2025-05-04"
+    assert res.fields.invoice_date.evidence == evidence
+
+
+def test_an_iso_date_printed_on_the_document_is_read_as_written():
+    lines = replace_line("Invoice date", "Invoice date: 2025-05-04")
+    res = process_document(make_pdf(lines), "inv.pdf", "doc-iso", llm_enabled=False)
+    assert res.fields.invoice_date.value == "2025-05-04"
+
+
+def test_an_amount_that_differs_past_the_second_decimal_is_a_conflict():
+    lines = replace_line("Total", "Total amount: EUR 1,23")
+    client = FakeClient(values={"total_amount": "1.234"})
+    res = process_document(make_pdf(lines), "inv.pdf", "doc-amt", llm_client=client)
+    assert res.fields.total_amount.evidence == Evidence.UNCORROBORATED
+    assert [c.value for c in res.fields.total_amount.candidates] == ["1.23", "1.234"]
+
+
+COMPLETE_LINES = [*INVOICE_LINES, "Supplier: Muster Logistik GmbH"]
+
+
+@pytest.mark.parametrize(
+    "client",
+    [
+        FakeClient(tokens=9000),                                        # blows MAX_TOKENS_PER_DOC
+        FakeClient(error=APIConnectionError(request=httpx.Request("POST", "https://x"))),
+        FakeClient(content="not json"),                                 # unparseable, twice
+    ],
+    ids=["budget-exceeded", "api-error", "unparseable"],
+)
+def test_a_failed_corroboration_call_leaves_the_document_as_the_rule_layer_read_it(client):
+    # every field is in the text layer, so the call was only ever for corroboration
+    pdf = make_pdf(COMPLETE_LINES)
+    without_model = process_document(pdf, "inv.pdf", "doc-f0", llm_enabled=False)
+    res = process_document(pdf, "inv.pdf", "doc-f1", llm_client=client)
+    assert client.calls >= 1
+    assert res.decision == without_model.decision
+    assert res.flagged_fields == without_model.flagged_fields
+    assert res.fields == without_model.fields
+
+
+def test_a_corroborated_value_carries_no_candidates():
+    client = FakeClient(values={"invoice_number": "INV-2025-00042"})
+    res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-co3", llm_client=client)
+    assert res.fields.invoice_number.candidates == []
+
+
+def test_llm_asked_for_missing_and_unproven_fields_but_not_verified_ones():
     client = FakeClient()
     process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-2", llm_client=client)
     asked = client.requested_fields[0]
-    assert "iban" not in asked          # rule layer already validated it
-    assert "invoice_number" not in asked
+    assert "supplier_name" in asked     # missing
+    assert "invoice_number" in asked    # rule-read, needs a second reader
+    assert "iban" not in asked          # checksum already proved it
 
 
 def test_pure_llm_mode_sends_every_field():
