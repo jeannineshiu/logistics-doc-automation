@@ -54,11 +54,22 @@ DECISION_STATUS: dict[Decision, Status] = {
 }
 
 
+class Candidate(BaseModel):
+    """One reader's value for a field in conflict."""
+
+    value: str
+    method: ExtractionMethod
+
+
 class FieldResult(BaseModel):
     value: str | None = None
     method: ExtractionMethod = ExtractionMethod.MISSING
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     evidence: Evidence | None = None
+    #: Set only for a conflict: independent readers produced different values.
+    #: `value` keeps the first reader's, so nothing downstream changes until a
+    #: reviewer chooses; the conflict itself is what goes to review.
+    candidates: list[Candidate] = []
 
     @model_validator(mode="after")
     def _evidence_defaults_to_the_weakest(self):

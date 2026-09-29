@@ -6,12 +6,15 @@ and never reaches the LLM.
 """
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal, InvalidOperation
 
 from dateutil import parser as dateparser
 from models.schemas import DocType, Evidence, ExtractionMethod, FieldResult
 from schwifty import IBAN
 from schwifty.exceptions import SchwiftyException
+
+ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 ISO_4217 = {
     "EUR", "USD", "GBP", "CHF", "PLN", "SEK", "DKK", "NOK", "CZK", "HUF",
@@ -69,8 +72,8 @@ def classify_doc_type(text: str) -> tuple[DocType, float]:
 
 # ---------------------------------------------------------------- helpers
 
-def normalize_amount(raw: str) -> str | None:
-    """Normalize '1.234,56' / '1,234.56' / '1234.56' to '1234.56'."""
+def _amount_digits(raw: str) -> str | None:
+    """'1.234,56' / '1,234.56' / '1234.56' -> '1234.56', with every digit kept."""
     s = raw.strip().replace(" ", "").replace(" ", "")
     s = re.sub(r"[^\d.,-]", "", s)
     if not re.search(r"\d", s):
@@ -79,9 +82,32 @@ def normalize_amount(raw: str) -> str | None:
     last_dot, last_comma = s.rfind("."), s.rfind(",")
     if last_comma > last_dot:
         # European: comma decimal, dots are thousands
-        s = s.replace(".", "").replace(",", ".")
-    else:
-        s = s.replace(",", "")
+        return s.replace(".", "").replace(",", ".")
+    return s.replace(",", "")
+
+
+def amount_value(raw: str) -> Decimal | None:
+    """The exact amount, unrounded, for comparing two readings of it.
+
+    normalize_amount rounds to cents, which would make 1.234 and 1.23 one
+    amount; two readers that differ past the second decimal read different
+    things.
+    """
+    s = _amount_digits(raw)
+    if s is None:
+        return None
+    try:
+        value = Decimal(s)
+    except InvalidOperation:
+        return None
+    return value if value >= 0 else None
+
+
+def normalize_amount(raw: str) -> str | None:
+    """Normalize '1.234,56' / '1,234.56' / '1234.56' to '1234.56'."""
+    s = _amount_digits(raw)
+    if s is None:
+        return None
     try:
         value = float(s)
     except ValueError:
@@ -99,9 +125,18 @@ def validate_iban(candidate: str) -> str | None:
 
 
 def parse_date(raw: str) -> str | None:
-    """Parse a date string, reject dates in the future or before 2000."""
+    """Parse a date string, reject dates in the future or before 2000.
+
+    An ISO date is read as written. `dayfirst` is right for 04.05.2025, but
+    dateutil applies it to 2025-05-04 as well and returns 5 April, which
+    misread ISO dates printed on documents and made an ISO value compare
+    equal to a different day.
+    """
     try:
-        d = dateparser.parse(raw, dayfirst=True, fuzzy=False).date()
+        if ISO_DATE.fullmatch(raw.strip()):
+            d = date.fromisoformat(raw.strip())
+        else:
+            d = dateparser.parse(raw, dayfirst=True, fuzzy=False).date()
     except (ValueError, OverflowError):
         return None
     if d > datetime.now(UTC).date() or d.year < 2000:
@@ -270,6 +305,26 @@ CUSTOMS_EXTRACTORS = {
     "declared_value": extract_declared_value,
     "currency": extract_currency,
 }
+
+
+# How each field's value is read before two readings of it are compared: the
+# same normalization its extractor applies, minus any rounding. A field not
+# listed is compared as text.
+_COMPARABLE = {
+    "total_amount": amount_value,
+    "declared_value": amount_value,
+    "gross_weight_kg": amount_value,
+    "invoice_date": parse_date,
+}
+
+
+def comparable(name: str, raw: str) -> object | None:
+    """`raw` in the form two readings of field `name` are compared in.
+
+    None when the field has no normalization or the value will not take it.
+    """
+    normalize = _COMPARABLE.get(name)
+    return normalize(raw) if normalize else None
 
 
 def verify_checksums(fields: dict[str, FieldResult]) -> dict[str, FieldResult]:

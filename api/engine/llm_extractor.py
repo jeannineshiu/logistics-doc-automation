@@ -1,7 +1,10 @@
-"""Layer 2 — GPT-4o Vision extraction for fields the rule layer missed.
+"""Layer 2 — GPT-4o Vision extraction for the fields it is asked for.
 
-Only the missing fields are requested; output is forced to JSON and parsed
-strictly. One retry on parse failure, all calls metered by TokenBudget.
+The pipeline asks for the fields the rule layer missed and, in the same call,
+the ones it read without proof, so the model can corroborate them. The prompt
+names fields only, never a value the rule layer read: a reader shown the answer
+is not independent. Output is forced to JSON and parsed strictly. One retry on
+parse failure, all calls metered by TokenBudget.
 """
 
 import json
@@ -45,35 +48,40 @@ FIELD_HINTS = {
 }
 
 
+# Output room per requested field. Asking for corroboration as well as the gaps
+# lengthens the answer, and a reply cut off at max_tokens parses as nothing.
+TOKENS_PER_FIELD = 120
+
+
 def _client() -> OpenAI:
     return OpenAI(timeout=LLM_TIMEOUT_SECONDS, max_retries=0)
 
 
-def build_prompt(doc_type: DocType, missing_fields: list[str]) -> str:
-    lines = [f'- "{f}": {FIELD_HINTS[f]}' for f in missing_fields]
+def build_prompt(doc_type: DocType, field_names: list[str]) -> str:
+    lines = [f'- "{f}": {FIELD_HINTS[f]}' for f in field_names]
     return (
         f"You are extracting fields from a {doc_type.value.replace('_', ' ')} image.\n"
         "Extract ONLY these fields:\n" + "\n".join(lines) + "\n\n"
         "Respond with a single JSON object of the form:\n"
         '{"fields": {"<field>": {"value": "<string or null>", '
-        '"confidence": <0.0-1.0>, "evidence": "<short quote/location in the image>"}}}\n'
+        '"confidence": <0.0-1.0>, "source_quote": "<short quote/location in the image>"}}}\n'
         "Rules: if a field is not visible, use value null and confidence 0. "
         "Never guess. Confidence reflects how clearly the value is legible."
     )
 
 
-def extract_missing_fields(
+def extract_fields(
     page_pngs: list[bytes],
     doc_type: DocType,
-    missing_fields: list[str],
+    field_names: list[str],
     budget: TokenBudget,
     client: OpenAI | None = None,
 ) -> dict[str, FieldResult]:
-    """Call GPT-4o Vision for the missing fields. Raises BudgetExceeded via budget."""
-    if not missing_fields:
+    """Call GPT-4o Vision for `field_names`. Raises BudgetExceeded via budget."""
+    if not field_names:
         return {}
     client = client or _client()
-    prompt = build_prompt(doc_type, missing_fields)
+    prompt = build_prompt(doc_type, field_names)
     content: list[dict] = [{"type": "text", "text": prompt}]
     for png in page_pngs[:2]:  # cap pages sent to control image-token cost
         content.append({"type": "image_url", "image_url": {"url": to_data_url(png), "detail": "high"}})
@@ -85,14 +93,14 @@ def extract_missing_fields(
             model=MODEL,
             messages=[{"role": "user", "content": content}],
             response_format={"type": "json_object"},
-            max_tokens=800,
+            max_tokens=max(800, TOKENS_PER_FIELD * len(field_names)),
             temperature=0,
         )
         budget.record(resp.usage.total_tokens)
         try:
             payload = json.loads(resp.choices[0].message.content)
             raw_fields = payload["fields"]
-            for name in missing_fields:
+            for name in field_names:
                 item = raw_fields.get(name) or {}
                 value = item.get("value")
                 conf = float(item.get("confidence", 0.0))
@@ -107,7 +115,7 @@ def extract_missing_fields(
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             continue  # retry once
     # both attempts failed to parse — report all as missing
-    return {name: FieldResult() for name in missing_fields}
+    return {name: FieldResult() for name in field_names}
 
 
 def estimate_cost(prompt_tokens: int, completion_tokens: int) -> float:

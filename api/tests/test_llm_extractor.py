@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from engine.budget import BudgetExceeded, TokenBudget
-from engine.llm_extractor import build_prompt, extract_missing_fields
+from engine.llm_extractor import build_prompt, extract_fields
 from models.schemas import DocType, ExtractionMethod
 
 
@@ -28,15 +28,15 @@ class FakeClient:
 
 GOOD = json.dumps({
     "fields": {
-        "supplier_name": {"value": "Acme GmbH", "confidence": 0.92, "evidence": "header"},
-        "total_amount": {"value": "500.00", "confidence": 0.88, "evidence": "footer"},
+        "supplier_name": {"value": "Acme GmbH", "confidence": 0.92, "source_quote": "header"},
+        "total_amount": {"value": "500.00", "confidence": 0.88, "source_quote": "footer"},
     }
 })
 
 
-def test_extracts_missing_fields():
+def test_extracts_requested_fields():
     budget = TokenBudget(max_tokens=8000, max_llm_calls=2)
-    out = extract_missing_fields(
+    out = extract_fields(
         [b"png"], DocType.INVOICE, ["supplier_name", "total_amount"], budget,
         client=FakeClient([GOOD]),
     )
@@ -48,7 +48,7 @@ def test_extracts_missing_fields():
 
 def test_retries_once_on_bad_json():
     client = FakeClient(["not json {", GOOD])
-    out = extract_missing_fields(
+    out = extract_fields(
         [b"png"], DocType.INVOICE, ["supplier_name", "total_amount"],
         TokenBudget(max_tokens=8000, max_llm_calls=2), client=client,
     )
@@ -57,7 +57,7 @@ def test_retries_once_on_bad_json():
 
 
 def test_gives_up_after_two_bad_responses():
-    out = extract_missing_fields(
+    out = extract_fields(
         [b"png"], DocType.INVOICE, ["supplier_name"],
         TokenBudget(max_tokens=8000, max_llm_calls=2),
         client=FakeClient(["bad", "still bad"]),
@@ -67,16 +67,16 @@ def test_gives_up_after_two_bad_responses():
 
 def test_budget_stops_retry():
     with pytest.raises(BudgetExceeded):
-        extract_missing_fields(
+        extract_fields(
             [b"png"], DocType.INVOICE, ["supplier_name"],
             TokenBudget(max_tokens=400, max_llm_calls=2),  # first call blows the cap
             client=FakeClient(["bad", GOOD]),
         )
 
 
-def test_no_missing_fields_no_call():
+def test_no_requested_fields_no_call():
     client = FakeClient([])
-    out = extract_missing_fields(
+    out = extract_fields(
         [b"png"], DocType.INVOICE, [], TokenBudget(), client=client
     )
     assert out == {}
@@ -85,7 +85,7 @@ def test_no_missing_fields_no_call():
 
 def test_null_value_marked_missing():
     payload = json.dumps({"fields": {"iban": {"value": None, "confidence": 0.0}}})
-    out = extract_missing_fields(
+    out = extract_fields(
         [b"png"], DocType.INVOICE, ["iban"], TokenBudget(), client=FakeClient([payload])
     )
     assert out["iban"].value is None
@@ -94,13 +94,13 @@ def test_null_value_marked_missing():
 
 def test_confidence_clamped():
     payload = json.dumps({"fields": {"iban": {"value": "DE00", "confidence": 3.0}}})
-    out = extract_missing_fields(
+    out = extract_fields(
         [b"png"], DocType.INVOICE, ["iban"], TokenBudget(), client=FakeClient([payload])
     )
     assert out["iban"].confidence == 1.0
 
 
-def test_prompt_only_asks_missing_fields():
+def test_prompt_only_asks_requested_fields():
     p = build_prompt(DocType.INVOICE, ["iban", "supplier_name"])
     assert "iban" in p and "supplier_name" in p
     assert "invoice_number" not in p
