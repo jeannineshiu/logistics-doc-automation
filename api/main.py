@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from engine.confidence import required_fields
+from engine.confidence import refuse_removed_settings, required_fields
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 from models.db import get_session, init_db
@@ -13,6 +13,9 @@ from sqlalchemy.orm import Session
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Before anything else: a removed routing setting means the operator's
+    # configuration no longer says what they think it says.
+    refuse_removed_settings()
     init_db()
     # A typo in REQUIRED_FIELDS_* would otherwise surface as a 500 on the first
     # document, one request at a time. Read it once here so the container fails
@@ -25,7 +28,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="logistics-doc-automation",
     description="Intelligent document processing with deterministic-first extraction, "
-    "GPT-4o Vision fallback, and confidence-based human-in-the-loop routing.",
+    "GPT-4o Vision fallback, and evidence-based human-in-the-loop routing.",
     version="0.1.0",
     lifespan=lifespan,
 )

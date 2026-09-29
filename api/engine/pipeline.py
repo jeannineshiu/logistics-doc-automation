@@ -1,4 +1,4 @@
-"""End-to-end extraction pipeline: rules → LLM fallback → confidence routing."""
+"""End-to-end extraction pipeline: rules → LLM fallback and corroboration → evidence routing."""
 
 import time
 
@@ -68,14 +68,15 @@ def process_document(
                     page_pngs, doc_type, missing + to_corroborate, budget, client=llm_client
                 )
                 fields = corroboration.combine(fields, llm_results)
-            except (BudgetExceeded, OpenAIError) as exc:
-                # A call made only to corroborate is a second opinion the
-                # document was processed without before: if it fails, the
-                # values stay uncorroborated and the document routes exactly
-                # as it did. A call that was also filling gaps fails as before.
-                if missing and isinstance(exc, BudgetExceeded):
-                    budget_exceeded = True
-                elif missing:
+            except BudgetExceeded:
+                # Whether it was filling gaps or corroborating, an overrun is
+                # named as one, so it is never mistaken for ordinary doubt.
+                budget_exceeded = True
+            except OpenAIError:
+                # A call made only to corroborate leaves its values
+                # uncorroborated, which already sends the document to review.
+                # A call that was also filling gaps fails as before.
+                if missing:
                     raise
     elif page_pngs and llm_enabled:
         # No usable text layer (scan/photo) — ask the LLM to identify + extract.

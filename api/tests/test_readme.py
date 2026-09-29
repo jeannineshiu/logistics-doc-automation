@@ -182,14 +182,16 @@ def test_every_env_var_named_is_real():
     assert not unknown, f"README documents settings that are not configured anywhere: {sorted(unknown)}"
 
 
-def test_routing_thresholds_match_the_code():
+def test_routing_settings_match_the_code():
     from engine import confidence
 
     assert "< 0.6" in README, "the reject floor is no longer documented"
     assert confidence.DOC_TYPE_FLOOR == 0.6, (
         f"README documents a 0.6 reject floor, code uses {confidence.DOC_TYPE_FLOOR}"
     )
-    assert "≥ 0.90" in README, "the auto-approve threshold is no longer documented"
-    assert "AUTO_APPROVE_THRESHOLD=0.90" in (ROOT / ".env.example").read_text(), (
-        "README documents a 0.90 auto-approve threshold, .env.example disagrees"
-    )
+    example = (ROOT / ".env.example").read_text()
+    for name in confidence.REMOVED_SETTINGS:
+        assert f"`{name}`" in README, f"README no longer says {name} was removed"
+        assert f"\n{name}=" not in example, (
+            f".env.example still sets {name}, which stops the API at startup"
+        )

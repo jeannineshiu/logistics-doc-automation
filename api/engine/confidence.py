@@ -1,4 +1,4 @@
-"""Layer 3 — confidence scoring and routing decision."""
+"""Layer 3 — the routing decision, made on evidence, and field confidence for display."""
 
 import os
 
@@ -13,11 +13,30 @@ DOC_TYPE_FLOOR = 0.6
 DOC_TYPE_UNCERTAIN_BELOW = 0.7
 
 
-def thresholds() -> dict[str, float]:
-    return {
-        "auto_approve": float(os.getenv("AUTO_APPROVE_THRESHOLD", "0.90")),
-        "review_floor": float(os.getenv("REVIEW_FLOOR_THRESHOLD", "0.50")),
-    }
+# Settings routing no longer reads. Each once tuned a confidence threshold, and
+# confidence no longer decides routing (ADR-0003, proposed): ignoring one silently would
+# let a deployment believe it had tightened a safety setting that does nothing.
+REMOVED_SETTINGS = {
+    "AUTO_APPROVE_THRESHOLD": "auto-approval now requires every required field to be "
+    "verified or corroborated, not a confidence score (ADR-0003, proposed)",
+    "REVIEW_FLOOR_THRESHOLD": "any required field without evidence already goes to "
+    "review, so the floor no longer changes an outcome (ADR-0003, proposed)",
+}
+
+
+def refuse_removed_settings() -> None:
+    """Raise if a removed routing setting is set, naming what replaced it.
+
+    Blank counts as unset: docker-compose passes an undefined variable through
+    as an empty string.
+    """
+    present = [name for name in REMOVED_SETTINGS if os.getenv(name, "").strip()]
+    if present:
+        raise RuntimeError(
+            "Removed settings are set: "
+            + "; ".join(f"{name} — evidence replaced it: {REMOVED_SETTINGS[name]}" for name in present)
+            + ". Unset them to start."
+        )
 
 
 def required_fields(doc_type: DocType | None = None) -> set[str] | None:
@@ -32,7 +51,7 @@ def required_fields(doc_type: DocType | None = None) -> set[str] | None:
     25, so every document routed to a human for fields it was never going to
     carry: a schema mismatch arriving as a review queue. Which fields a
     document class must have is a property of that class, so it belongs in
-    configuration next to the threshold rather than compiled into the schema:
+    configuration rather than compiled into the schema:
 
         REQUIRED_FIELDS_INVOICE=invoice_number,invoice_date,supplier_name,total_amount
 
@@ -67,41 +86,34 @@ def route(
     budget_exceeded: bool = False,
     doc_type: DocType | None = None,
 ) -> tuple[Decision, list[str]]:
-    """Return (decision, flagged_fields)."""
-    th = thresholds()
+    """Return (decision, flagged_fields), decided on evidence (ADR-0003, proposed).
 
+    A document is auto-approved when its type is established, its budget held,
+    and every required field is verified or corroborated. Field confidence
+    plays no part: a reader scores its wrong values as highly as its right ones.
+    """
     if doc_type_conf < DOC_TYPE_FLOOR:
         return Decision.REJECT, ["<doc_type_unknown>"]
 
     required = required_fields(doc_type)
 
-    # An optional field that is simply absent is not a defect and is not
-    # flagged: flagging it would put a field the reviewer cannot supply on the
-    # review form, and would contradict auto-approve returning nothing flagged.
-    flagged = [
-        name
-        for name, f in fields.items()
-        if (f.value is None and _is_required(name, required))
-        or (f.value is not None and f.confidence < th["auto_approve"])
+    # Only required fields are flagged. An optional field the document does not
+    # carry is not something a reviewer can supply, and one that is present but
+    # uncorroborated is kept with its evidence rather than queued for a human.
+    unevidenced = [
+        name for name, f in fields.items()
+        if _is_required(name, required) and f.flag_reason is not None
     ]
-    if doc_type_conf < DOC_TYPE_UNCERTAIN_BELOW:
-        flagged = ["<doc_type_uncertain>", *flagged]
+    doc_flags = ["<doc_type_uncertain>"] if doc_type_conf < DOC_TYPE_UNCERTAIN_BELOW else []
 
     if budget_exceeded:
-        return Decision.HUMAN_REVIEW, ["<budget_exceeded>", *flagged]
+        return Decision.HUMAN_REVIEW, ["<budget_exceeded>", *doc_flags, *unevidenced]
 
-    missing_required = [
-        name for name, f in fields.items() if f.value is None and _is_required(name, required)
-    ]
-    present_confs = [f.confidence for f in fields.values() if f.value is not None]
-
-    # No field at all is not an approval. With every field required this was
-    # unreachable; with an optional set it is a document nothing was read from.
-    if missing_required or not present_confs or min(present_confs) < th["review_floor"]:
-        return Decision.HUMAN_REVIEW, flagged
-    if all(c >= th["auto_approve"] for c in present_confs):
-        return Decision.AUTO_APPROVE, []
-    return Decision.HUMAN_REVIEW, flagged
+    # No field at all is not an approval: with an optional set it is a
+    # document nothing was read from.
+    if unevidenced or not any(f.value is not None for f in fields.values()):
+        return Decision.HUMAN_REVIEW, [*doc_flags, *unevidenced]
+    return Decision.AUTO_APPROVE, []
 
 
 def overall_confidence(fields: dict[str, FieldResult], doc_type: DocType | None = None) -> float:

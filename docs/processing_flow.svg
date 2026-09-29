@@ -18,7 +18,7 @@
   </defs>
   <rect width="1260" height="1380" fill="#FFFFFF"/>
   <text x="40" y="44" font-size="20" fill="#18181B" text-anchor="start" font-weight="700">Document processing flow — one document, end to end</text>
-  <text x="40" y="68" font-size="12" fill="#52525B" text-anchor="start">Time runs down the page. The routing decision is computed by the confidence router and returned to n8n; the Switch only fans out on the status it received.</text>
+  <text x="40" y="68" font-size="12" fill="#52525B" text-anchor="start">Time runs down the page. The routing decision is computed by the evidence router and returned to n8n; the Switch only fans out on the status it received.</text>
   <rect x="36" y="92" width="192" height="1154" rx="10" fill="#FFFBEB" stroke="#FDE68A" stroke-width="1.2"/>
   <text x="50" y="112" font-size="11.5" fill="#52525B" text-anchor="start" font-weight="700">Reviewer</text>
   <path d="M 36 122 H 228" fill="none" stroke="#FDE68A" stroke-width="1.2"/>
@@ -55,7 +55,7 @@
   <text x="869.0" y="413" font-size="9.8" fill="#52525B" text-anchor="middle">hard caps: 8 000 tokens / 2 calls per doc</text>
   <path d="M 869 414 V 428" fill="none" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
   <rect x="742" y="430" width="254" height="52" rx="7" fill="#FEFCE8" stroke="#D97706" stroke-width="1.4"/>
-  <text x="869" y="450" font-size="11.5" fill="#B45309" text-anchor="middle" font-weight="700">3 · Confidence router</text>
+  <text x="869" y="450" font-size="11.5" fill="#B45309" text-anchor="middle" font-weight="700">3 · Evidence router</text>
   <text x="869" y="468" font-size="9.4" fill="#92400E" text-anchor="middle">decides auto_approve / human_review / reject</text>
   <path d="M 596 244 H 664 V 316 H 720" fill="none" stroke="#71717A" stroke-width="1.5" marker-end="url(#arrow)"/>
   <rect x="599" y="224.5" width="74.8375" height="18.5" rx="3" fill="#FFFFFF"/>

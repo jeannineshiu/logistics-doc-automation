@@ -1,6 +1,6 @@
 # logistics-doc-automation
 
-**Supervised-autonomy document processing for logistics** — invoices and customs forms flow in, structured fields flow out. High-confidence extractions are auto-approved; anything uncertain is routed to a human. Orchestrated in **n8n**, computed by a **FastAPI** engine with a **deterministic-first** extraction strategy and **GPT-4o Vision** fallback.
+**Supervised-autonomy document processing for logistics** — invoices and customs forms flow in, structured fields flow out. Extractions the engine can vouch for — verified by a checksum or corroborated by a second reader — are auto-approved; everything else is routed to a human. Orchestrated in **n8n**, computed by a **FastAPI** engine with a **deterministic-first** extraction strategy and **GPT-4o Vision** fallback.
 
 > The goal is not "fully automated" — it's *supervised autonomy*: humans handle exceptions, not routine data entry.
 
@@ -18,7 +18,7 @@ n8n decided the outcome. It does not.
 
 ### What happens to one document
 
-![Swimlane flow across four lanes — Reviewer, n8n, FastAPI and PostgreSQL. The webhook receives the file, Call Extract API posts it to /extract, and the three-layer engine runs rules, then GPT-4o Vision for whatever is still missing, then the confidence router, which is where auto_approve, human_review and reject are decided. The API persists the document and audit entry and returns status alongside the fields; back in the n8n lane, Switch on Status fans out to Auto Notify, Review Wait for Human, and Reject Alert. The review branch crosses into the Reviewer lane and back, then validates the corrections and either submits them or records an invalid one to the dead-letter queue. A failure strip along the bottom shows the error workflow](docs/processing_flow.svg)
+![Swimlane flow across four lanes — Reviewer, n8n, FastAPI and PostgreSQL. The webhook receives the file, Call Extract API posts it to /extract, and the three-layer engine runs rules, then GPT-4o Vision for whatever is still missing, then the evidence router, which is where auto_approve, human_review and reject are decided. The API persists the document and audit entry and returns status alongside the fields; back in the n8n lane, Switch on Status fans out to Auto Notify, Review Wait for Human, and Reject Alert. The review branch crosses into the Reviewer lane and back, then validates the corrections and either submits them or records an invalid one to the dead-letter queue. A failure strip along the bottom shows the error workflow](docs/processing_flow.svg)
 
 **The routing decision is made in the engine, not in n8n.** `/extract` returns
 `decision` and `status` next to the extracted fields, and `Switch on Status`
@@ -36,13 +36,21 @@ Fields with a fixed format (IBAN, VAT ID, dates, HS codes, amounts) are extracte
 - `MAX_TOKENS_PER_DOC=8000` and `MAX_LLM_CALLS_PER_DOC=2` are hard caps — exceeded means abort and route to human review with `<budget_exceeded>` flagged, written to the audit log.
 - Every response reports `tokens_used` and `cost_usd`; `/metrics` exposes totals in Prometheus format.
 
-### Confidence-based routing
+### Evidence-based routing
 
 | Decision | Condition | Resulting status |
 |---|---|---|
-| `auto_approve` | every *required* field present, and every field read at confidence ≥ 0.90 | `approved` |
-| `human_review` | a required field missing, nothing read at all, any field below 0.90, or budget exceeded | `pending_review` |
+| `auto_approve` | every *required* field is **verified** (its checksum passes) or **corroborated** (the rule layer and the model read the same value) | `approved` |
+| `human_review` | a required field missing, uncorroborated or in conflict, nothing read at all, or budget exceeded | `pending_review` |
 | `reject` | no document type could be established (confidence < 0.6) | `rejected` |
+
+A reader's own confidence plays no part (ADR-0003, proposed). On 25 real DocILE invoices
+every wrong value the model wrote unattended came back at a self-reported 0.9,
+the same as the right ones, and the rule layer's three wrong reads scored 0.92
+to 0.95 — no threshold separates them. Each flagged field comes back in
+`flag_reasons` as `missing`, `uncorroborated` or `conflict`, and a conflict
+carries both readers' values as `candidates`. Field confidence is kept for
+ordering and display.
 
 **Which fields are required is configuration, not schema.** Unset, it is every
 field the document type defines — right for the EU invoices this was built
@@ -72,7 +80,7 @@ stored `decision`, which is still `human_review`. Branching on that sent
 resolved documents back to the review form, where the write-back failed with a
 409 and produced a spurious review task and dead-letter entry.
 
-Thresholds are env vars because they're a **business decision**: raising `AUTO_APPROVE_THRESHOLD` trades a higher human-intervention rate for a lower rate of wrong data entering the system.
+There is no auto-approve threshold to tune. `AUTO_APPROVE_THRESHOLD` and `REVIEW_FLOOR_THRESHOLD` were removed with confidence-based routing, and setting either stops the API at startup with a message saying evidence replaced it — ignoring one silently would let a deployment believe it had tightened a safety setting that no longer does anything.
 
 ## Quickstart
 
@@ -347,7 +355,7 @@ Below the fold, a searchable document table and latency percentiles for debuggin
 
 ## Tests
 
-169 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
+183 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
 pinned so a rebuild reproduces the versions these numbers were measured on:
 
 ```bash
