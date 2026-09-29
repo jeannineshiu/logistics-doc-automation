@@ -4,6 +4,7 @@ A renamed node leaves a dangling connection that only fails at import time,
 and a broken errorWorkflow id disables exception handling silently.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -78,3 +79,17 @@ def test_invalid_corrections_are_routed_not_thrown():
     body = recorder["parameters"]["jsonBody"]
     assert "/dead-letter" in recorder["parameters"]["url"]
     assert "submitted" in body and "$json.raw" in body, "reviewer's raw input must be preserved"
+
+
+def test_the_review_form_shows_the_engines_brief():
+    """Reasons, candidates and ordering are decided and tested in Python; the
+    form only displays them, so n8n keeps no rule of its own about them."""
+    main = next(wf for wf in load_workflows().values() if wf["id"] == MAIN_ID)
+    form = next(n for n in main["nodes"] if n["name"] == "Review: Wait for Human (Form)")
+    description = form["parameters"]["formDescription"]
+    assert "{{ $json.review_brief }}" in description
+    assert "flagged_fields" not in description
+
+    # still branching on status alone (ADR-0001)
+    switch = next(n for n in main["nodes"] if n["name"] == "Switch on Status")
+    assert "$json.status" in json.dumps(switch["parameters"])

@@ -502,3 +502,57 @@ def test_us_invoice_is_unapprovable_until_the_required_set_says_so(monkeypatch):
     assert res.decision == Decision.AUTO_APPROVE
     assert res.flagged_fields == []
     assert res.fields.iban.value is None, "still absent, just no longer disqualifying"
+
+
+# The review brief: what the reviewer is told to check on the n8n form.
+
+
+def _brief_lines(res):
+    return res.review_brief.splitlines()
+
+
+def test_the_review_brief_names_each_flagged_field_with_its_reason():
+    lines = INVOICE_LINES[:3]    # number and date read by the rule layer; the rest absent
+    client = FakeClient(values={"invoice_number": "INV-2025-00042", "invoice_date": None,
+                                "supplier_name": "Muster Logistik GmbH"} | dict.fromkeys(
+        ["supplier_vat_id", "currency", "total_amount", "iban"]))
+    res = process_document(make_pdf(lines), "inv.pdf", "doc-b1", llm_client=client)
+    brief = res.review_brief
+    assert "supplier_name — uncorroborated: only the model read \"Muster Logistik GmbH\"" in brief
+    assert "invoice_date — uncorroborated: only the rule layer read \"2025-03-15\"" in brief
+    assert "iban — missing: no reader found a value" in brief
+    assert "invoice_number" not in brief, "corroborated, so nothing to check"
+
+
+def test_a_conflict_in_the_brief_shows_both_candidates_with_their_readers():
+    client = FakeClient(values=AGREEING | {"total_amount": "10903.74"})
+    res = process_document(make_pdf(COMPLETE_LINES), "inv.pdf", "doc-b2", llm_client=client)
+    assert _brief_lines(res) == [
+        '• total_amount — conflict: the rule layer read "1234.56", the model read "10903.74"'
+    ]
+
+
+def test_the_brief_lists_the_least_confident_field_first():
+    # the model is less sure of the supplier than the rule layer is of its reads,
+    # and a missing field has nothing behind it at all
+    client = FakeClient(values={"supplier_name": "Muster Logistik GmbH", "invoice_number": None},
+                        confidence=0.5)
+    res = process_document(make_pdf(INVOICE_LINES), "inv.pdf", "doc-b3", llm_client=client)
+    named = [line.split(" — ")[0].removeprefix("• ") for line in _brief_lines(res)]
+    confidences = [getattr(res.fields, name).confidence for name in named]
+    assert confidences == sorted(confidences)
+    assert named[0] == "supplier_name"
+
+
+def test_document_flags_lead_the_brief():
+    client = FakeClient(tokens=9000, values=AGREEING)
+    res = process_document(make_pdf(COMPLETE_LINES), "inv.pdf", "doc-b4", llm_client=client)
+    assert _brief_lines(res)[0].startswith("• the extraction budget ran out")
+
+
+def test_an_auto_approved_document_has_no_brief():
+    res = process_document(
+        make_pdf(COMPLETE_LINES), "inv.pdf", "doc-b5", llm_client=FakeClient(values=AGREEING)
+    )
+    assert res.decision == Decision.AUTO_APPROVE
+    assert res.review_brief == ""

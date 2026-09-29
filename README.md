@@ -163,7 +163,7 @@ curl -F "file=@data/samples/invoice_004_scan.pdf" http://localhost:5678/webhook/
 curl -F "file=@data/samples/invoice_034_scan.pdf" http://localhost:5678/webhook/doc-upload
 ```
 
-The `human_review` branch pauses on an **n8n Form** — the reviewer corrects the flagged fields and the workflow resumes by writing back through `POST /review/{id}`.
+The `human_review` branch pauses on an **n8n Form** — the reviewer corrects the flagged fields and the workflow resumes by writing back through `POST /review/{id}`, where each correction is stored with evidence `reviewed`. The form shows the engine's `review_brief`: document flags first, then each flagged field, least confident first, with why it is flagged (`missing`, `uncorroborated` or `conflict`) and, for a conflict, what the rule layer and the model each read. The brief is built and tested in Python; the form only displays it.
 
 ![n8n Form node paused mid-execution for a customs form, headed "Document Review" with the document id, naming gross_weight_kg as the low-confidence or missing field, and offering a corrections_json textarea and a reviewer field above a Submit button](docs/HITL.png)
 
@@ -355,7 +355,7 @@ Below the fold, a searchable document table and latency percentiles for debuggin
 
 ## Tests
 
-183 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
+191 pytest tests, no API key needed (LLM mocked / disabled). Dependencies are
 pinned so a rebuild reproduces the versions these numbers were measured on:
 
 ```bash

@@ -162,7 +162,7 @@
       "parameters": {
         "resume": "form",
         "formTitle": "=Document Review: {{ $json.document_id }}",
-        "formDescription": "=This {{ $json.doc_type.replace('_', ' ') }} needs review. Low-confidence or missing fields: {{ ($json.flagged_fields || []).join(', ') }}. Enter corrections as JSON (e.g. {\"invoice_number\": \"INV-2025-00006\"}), then submit to resume the workflow.",
+        "formDescription": "=This {{ $json.doc_type.replace('_', ' ') }} needs review. Check these:\n{{ $json.review_brief }}\n\nEnter corrections as JSON (e.g. {\"invoice_number\": \"INV-2025-00006\"}), then submit to resume the workflow.",
         "formFields": {
           "values": [
             {
