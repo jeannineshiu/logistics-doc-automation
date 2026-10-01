@@ -252,3 +252,49 @@ def test_flag_reasons_are_reported_and_replayed_from_storage(client, invoice_pdf
 
     replayed = _upload(client, invoice_pdf).json()
     assert replayed["flag_reasons"] == first["flag_reasons"]
+
+
+def test_a_conflicted_document_is_briefed_and_its_correction_stored_as_reviewed(
+    client, monkeypatch
+):
+    """The review path the form drives: /extract, the brief the form shows,
+    then the reviewer's choice written back through /review."""
+    from engine import llm_extractor
+
+    from tests.test_pipeline import AGREEING, COMPLETE_LINES, FakeClient
+
+    monkeypatch.setenv("LLM_ENABLED", "1")
+    fake = FakeClient(values=AGREEING | {"total_amount": "10903.74"})
+    monkeypatch.setattr(llm_extractor, "_client", lambda: fake)
+
+    body = _upload(client, make_pdf(COMPLETE_LINES)).json()
+    assert body["status"] == "pending_review"
+    assert body["flag_reasons"] == {"total_amount": "conflict"}
+    assert 'the rule layer read "1234.56", the model read "10903.74"' in body["review_brief"]
+    assert _upload(client, make_pdf(COMPLETE_LINES)).json()["review_brief"] == body["review_brief"]
+
+    resp = client.post(
+        f"/review/{body['document_id']}",
+        json={"corrected_fields": {"total_amount": "10903.74"}, "reviewer": "jeannine"},
+    )
+    assert resp.status_code == 200
+    total = client.get(f"/documents/{body['document_id']}").json()["fields"]["total_amount"]
+    assert total["value"] == "10903.74"
+    assert total["evidence"] == "reviewed"
+    assert total["candidates"] == [], "the reviewer settled the conflict"
+
+
+def test_a_stored_flag_without_a_reason_still_reaches_the_brief(client, invoice_pdf):
+    """A row flagged under older rules: its field now computes no reason, but
+    the reviewer must still see that it was flagged."""
+    from models.db import Document, SessionLocal
+
+    doc_id = _upload(client, invoice_pdf).json()["document_id"]
+    with SessionLocal() as db:
+        doc = db.get(Document, doc_id)
+        doc.flagged_fields = ["iban"]    # verified, so it has no reason today
+        db.commit()
+
+    replayed = _upload(client, invoice_pdf).json()
+    assert replayed["flag_reasons"] == {}
+    assert replayed["review_brief"] == "• iban"

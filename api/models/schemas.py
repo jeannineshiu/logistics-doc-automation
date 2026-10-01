@@ -74,6 +74,14 @@ class Candidate(BaseModel):
     method: ExtractionMethod
 
 
+# How each reader is named to a reviewer. A missing value has no reader.
+READER_NAMES: dict[ExtractionMethod, str] = {
+    ExtractionMethod.RULE: "the rule layer",
+    ExtractionMethod.LLM: "the model",
+    ExtractionMethod.HUMAN: "a reviewer",
+}
+
+
 class FieldResult(BaseModel):
     value: str | None = None
     method: ExtractionMethod = ExtractionMethod.MISSING
@@ -106,6 +114,23 @@ class FieldResult(BaseModel):
         if self.evidence not in APPROVABLE_EVIDENCE:
             return FlagReason.UNCORROBORATED
         return None
+
+    @property
+    def review_note(self) -> str | None:
+        """What a reviewer needs to know about this value, in its flag reason's terms."""
+        reason = self.flag_reason
+        if reason is None:
+            return None
+        if reason == FlagReason.MISSING:
+            detail = "no reader found a value"
+        elif reason == FlagReason.CONFLICT:
+            detail = ", ".join(
+                f'{READER_NAMES.get(c.method, c.method.value)} read "{c.value}"' for c in self.candidates
+            )
+        else:
+            reader = READER_NAMES.get(self.method, self.method.value)
+            detail = f'only {reader} read "{self.value}"'
+        return f"{reason.value}: {detail}"
 
 
 INVOICE_FIELDS = [
@@ -147,6 +172,14 @@ class CustomsFields(BaseModel):
     currency: FieldResult = FieldResult()
 
 
+# How each document flag is put to a reviewer.
+DOCUMENT_FLAG_BRIEF: dict[str, str] = {
+    "<budget_exceeded>": "the extraction budget ran out before every field was read or checked",
+    "<doc_type_uncertain>": "the document type is a guess, so check that these fields fit it",
+    "<doc_type_unknown>": "the document type could not be established",
+}
+
+
 class ExtractionResponse(BaseModel):
     document_id: str
     doc_type: DocType
@@ -179,6 +212,26 @@ class ExtractionResponse(BaseModel):
             if field is not None and field.flag_reason is not None:
                 reasons[name] = field.flag_reason
         return reasons
+
+    @computed_field
+    @property
+    def review_brief(self) -> str:
+        """What the reviewer is asked to check, one line per flag.
+
+        Document flags lead; flagged fields follow, least confident first, each
+        with its reason and, for a conflict, every reader's value. The review
+        form shows this as is, so the wording is tested here, not in n8n.
+        """
+        lines = [DOCUMENT_FLAG_BRIEF.get(name, name) for name in self.flagged_fields
+                 if name.startswith("<")]
+        # Every flagged field is listed, even one whose reason no longer
+        # computes (a row stored under older rules): dropping it would hide it.
+        fields = {name: getattr(self.fields, name, None) or FieldResult()
+                  for name in self.flagged_fields if not name.startswith("<")}
+        for name in sorted(fields, key=lambda n: fields[n].confidence):
+            note = fields[name].review_note
+            lines.append(f"{name} — {note}" if note else name)
+        return "\n".join(f"• {line}" for line in lines)
 
     @model_validator(mode="after")
     def _default_status_from_decision(self):
